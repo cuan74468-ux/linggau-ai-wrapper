@@ -41,6 +41,11 @@ export function checkText(featureId,values,text){
    const days=parts.filter(p=>p.heading==="HARI");
    checks.push(check("Hari berurutan sesuai periode",days.length===rows&&days.every((p,i)=>p.body===String(i+1))));
  }
+ if(featureId==="lesson-module"){
+   const body=parts.find(p=>p.heading==="LANGKAH KEGIATAN")?.body||"";
+   const lines=body.split(/\r?\n/).filter(l=>l.trim()).map(l=>l.match(/^\s*(\d+)\s+menit\s*\|\s*(\S.*)$/i));
+   checks.push(check("Durasi kegiatan sesuai target",lines.length>0&&lines.every(m=>m&&+m[1]>0)&&lines.reduce((sum,m)=>sum+(m?+m[1]:0),0)===Number.parseInt(values.lessonLength,10)));
+ }
  if(featureId==="quiz-rubric"){
    const n=Number.parseInt(values.questionCount,10),get=h=>parts.find(p=>p.heading===h)?.body||"";
    const numbered=s=>s.split(/\r?\n/).filter(x=>x.trim()).map(l=>l.match(/^\s*(\d+)[.)]\s+(.+)$/));
