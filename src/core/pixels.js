@@ -40,8 +40,39 @@ export function compositePixels(source,background,mask,w,h){
    const m=mask[i+3],a=source[i+3]*m/(255*255);
    if(m===255&&source[i+3]===255){out.set(source.subarray(i,i+4),i);protectedPixels++;}
    else{for(let c=0;c<3;c++)out[i+c]=Math.round(source[i+c]*a+background[i+c]*(1-a));out[i+3]=255;}
-   if(m===0)editablePixels++;
+   if(m===0||source[i+3]===0)editablePixels++;
  }
  if(!protectedPixels||!editablePixels)throw Error("MASK_AREA_INVALID");
  return {pixels:out,protectedPixels,editablePixels};
+}
+
+ // Alpha-aware cutout: preserve the source alpha instead of multiplying it by itself.
+export function existingAlphaMask(source,w,h){
+ check(source,w,h);
+ const mask=new Uint8ClampedArray(source.length);let opaque=0,empty=0;
+ for(let i=3;i<source.length;i+=4){mask[i]=255;if(source[i]===255)opaque++;if(source[i]===0)empty++;}
+ if(!opaque||!empty)throw Error("ALPHA_MASK_UNAVAILABLE");
+ return {mask,opaque,empty};
+}
+export function transparentPixels(source,mask,w,h){
+ check(source,w,h);if(!(mask instanceof Uint8ClampedArray)||mask.length!==source.length)throw Error("MASK_INVALID");
+ const out=new Uint8ClampedArray(source.length);let protectedPixels=0,editablePixels=0;
+ for(let i=0;i<source.length;i+=4){
+  const a=Math.round(source[i+3]*mask[i+3]/255);
+  if(a){out[i]=source[i];out[i+1]=source[i+1];out[i+2]=source[i+2];out[i+3]=a;}
+  else editablePixels++;
+  if(a===255)protectedPixels++;
+ }
+ if(!protectedPixels||!editablePixels)throw Error("MASK_AREA_INVALID");
+ return {pixels:out,protectedPixels,editablePixels};
+}
+export function countPixelChanges(expected,actual,source,mask,w,h){
+ check(expected,w,h);check(actual,w,h);check(source,w,h);
+ if(!(mask instanceof Uint8ClampedArray)||mask.length!==source.length)throw Error("MASK_INVALID");
+ let protectedPixels=0,changed=0;
+ for(let i=0;i<source.length;i+=4)if(source[i+3]===255&&mask[i+3]===255){
+  protectedPixels++;
+  for(let j=0;j<4;j++)if(expected[i+j]!==source[i+j]||actual[i+j]!==source[i+j]){changed++;break;}
+ }
+ return {protectedPixels,changed};
 }

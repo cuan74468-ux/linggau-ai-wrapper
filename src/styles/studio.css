@@ -226,3 +226,5 @@
 #studio [hidden]{display:none!important}#studio .precision-panel{padding:10px;border:1px solid var(--ink);border-radius:8px;background:var(--board);margin:8px 0}#studio .mask-area{display:grid;gap:6px;margin-top:6px;min-width:0}#studio .mask-canvas{display:block;max-width:100%;width:auto;height:auto;max-height:460px;object-fit:contain;justify-self:center;border:1px solid var(--ink);border-radius:6px;cursor:crosshair;touch-action:manipulation}#studio .mask-area .actions{margin:0;flex-wrap:wrap}@media(max-width:700px){#studio .mask-canvas{max-height:320px}}
 
 #studio .mask-canvas{max-height:none;width:auto;height:auto;max-width:100%;box-sizing:content-box;object-fit:initial}#studio .precision-active .source-preview img{display:none}
+
+#studio .precision-option{display:flex;align-items:center;gap:8px;margin:10px 0 0;font-size:13px}#studio .precision-option input{width:20px;height:20px;min-height:0;padding:0;flex:none;accent-color:#4338ca}#studio .mask-canvas{background:repeating-conic-gradient(#ddd 0% 25%,#fff 0% 50%) 0 0/16px 16px}#studio .mask-area .actions button{font-size:12px;padding:6px 8px;min-height:44px}

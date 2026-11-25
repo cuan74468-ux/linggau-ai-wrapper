@@ -1,0 +1,10 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {existingAlphaMask,transparentPixels,compositePixels,countPixelChanges} from "../src/core/pixels.js";
+import {backdropPlan,supportsPrecision} from "../src/core/local-image.js";
+const rgba=(...v)=>new Uint8ClampedArray(v);
+test("existing alpha is not squared at translucent edges and background gets replaced",()=>{const s=rgba(10,20,30,255,100,80,60,128,0,0,0,0), b=rgba(255,255,255,255,0,0,0,255,90,90,90,255);const {mask}=existingAlphaMask(s,3,1);const cut=transparentPixels(s,mask,3,1);assert.deepEqual(cut.pixels,s);const c=compositePixels(s,b,mask,3,1);assert.deepEqual([...c.pixels],[10,20,30,255,50,40,30,255,90,90,90,255]);});
+test("opaque photo cannot silently activate automatic alpha mode",()=>assert.throws(()=>existingAlphaMask(rgba(1,2,3,255,1,2,3,255),2,1),/ALPHA_MASK_UNAVAILABLE/));
+test("manual cutout preserves fully protected pixels and makes outside transparent",()=>{const s=rgba(10,20,30,255,40,50,60,255),m=rgba(0,0,0,255,0,0,0,0);assert.deepEqual([...transparentPixels(s,m,2,1).pixels],[10,20,30,255,0,0,0,0]);});
+test("round trip check flags single protected pixel changed",()=>{const s=rgba(10,20,30,255,40,50,60,255),m=rgba(0,0,0,255,0,0,0,0),out=transparentPixels(s,m,2,1).pixels;assert.deepEqual(countPixelChanges(out,out,s,m,2,1),{protectedPixels:1,changed:0});const altered=out.slice();altered[1]++;assert.equal(countPixelChanges(out,altered,s,m,2,1).changed,1);altered.set(out);altered[4]++;assert.equal(countPixelChanges(out,altered,s,m,2,1).changed,0);});
+test("transparent export needs no backdrop request; mockup context is included when needed",()=>{assert.deepEqual(backdropPlan({transparent:true}),{transparent:true});assert.match(backdropPlan({background:"Studio beige",sceneBrief:"Meja toko"}).prompt,/Meja toko/);assert.ok(supportsPrecision("product-photo"));assert.ok(supportsPrecision("food-photo"));});

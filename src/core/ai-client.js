@@ -50,6 +50,8 @@ export function friendlyError(error){
   const m=String(error?.message||error);
   if(m.includes("LOCAL_IMAGE_LIMIT")) return "Mode lokal mendukung foto hingga 4 megapiksel dan sisi maksimal 4096 px. Gunakan foto lebih kecil.";
   if(m.includes("LOCAL_OUTPUT_LIMIT")) return "PNG hasil melebihi 8 MB. Gunakan foto beresolusi lebih kecil.";
+  if(m.includes("PIXEL_VERIFY_FAILED")) return "Piksel terlindungi berubah saat ekspor. Hasil ditolak; foto sumber tetap utuh.";
+  if(m.includes("ALPHA_MASK_UNAVAILABLE")) return "Foto tidak memiliki latar transparan yang cukup. Tandai objek secara manual.";
   if(m.includes("MASK_")) return "Tandai keliling objek dengan minimal tiga titik dan sisakan area latar.";
   if(m.includes("BACKGROUND_UNCHANGED")) return "Pilih latar baru atau isi deskripsi latar.";
   if(m.includes("LOCAL_CANVAS")) return "Pemrosesan lokal tidak tersedia pada browser ini.";
