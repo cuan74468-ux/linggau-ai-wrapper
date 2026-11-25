@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Linggau AI Studio</title>
+  <style>
+    * { box-sizing: border-box; }
+    html { font-family: system-ui, sans-serif; color: #222; background: #f5f5f2; }
+    body { margin: 0; }
+    #app { min-height: 100vh; min-height: 100dvh; }
+    .boot { min-height: 100vh; min-height: 100dvh; display: grid;
+      place-items: center; padding: 20px; }
+    .card { width: 100%; max-width: 400px; padding: 24px;
+      border: 1px solid #deded8; border-radius: 16px; background: #fff; }
+    h1 { font-size: 22px; margin: 0 0 12px; }
+    p { color: #555; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+    button { min-height: 44px; padding: 12px 20px; width: 100%; border: 0;
+      border-radius: 10px; background: #222; color: #fff; font: inherit; cursor: pointer; }
+    button:focus-visible { outline: 3px solid #777; outline-offset: 3px; }
+  </style>
+</head>
+<body>
+  <main id="app" aria-busy="true">
+    <section class="boot"><div class="card">
+      <h1>Linggau AI Studio</h1>
+      <p id="boot-status" role="status">Menyiapkan aplikasi...</p>
+      <noscript>JavaScript diperlukan untuk menjalankan aplikasi.</noscript>
+    </div></section>
+  </main>
+  <script type="module">
+    const apiKey = "";
+    const CDN = "https://cdn.jsdelivr.net/gh/cuan74468-ux/linggau-ai-wrapper";
+    const SHELL_API = 1;
+    const ENTRY = "src/app.js";
+    const root = document.getElementById("app");
+    let stage = "INITIALIZATION";
+
+    // Disabled until a supported Canvas AI runtime is verified.
+    // No API keys, private endpoints or AI requests are exposed to modules.
+    const aiBridge = Object.freeze({
+      available: false,
+      provider: "gemini-canvas",
+      mode: "disabled",
+      async editImage() {
+        throw new Error("AI_BRIDGE_NOT_CONNECTED");
+      }
+    });
+
+    function setStatus(message) {
+      const target = document.getElementById("boot-status");
+      if (target) target.textContent = message;
+    }
+
+    function validateManifest(m) {
+      if (!m || typeof m !== "object" || Array.isArray(m)) {
+        throw new Error("MANIFEST_INVALID");
+      }
+      if (m.shellApi !== SHELL_API) throw new Error("SHELL_API_INCOMPATIBLE");
+      if (m.entry !== ENTRY) throw new Error("ENTRY_NOT_ALLOWED");
+      const pattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+      for (const v of [m.version, m.release]) {
+        if (typeof v !== "string" || v.length > 64 || v !== v.trim() || !pattern.test(v)) {
+          throw new Error("VERSION_FORMAT_INVALID");
+        }
+      }
+      if (m.release !== m.version) throw new Error("VERSION_RELEASE_MISMATCH");
+      return Object.freeze({ version: m.version, release: m.release, entry: ENTRY });
+    }
+
+    async function loadManifest() {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15000);
+      try {
+        const response = await fetch(CDN + "@main/manifest.json", {
+          method: "GET", cache: "no-store", credentials: "omit",
+          redirect: "error", signal: controller.signal
+        });
+        if (!response.ok) throw new Error("MANIFEST_HTTP_" + response.status);
+        return validateManifest(await response.json());
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    function showError(error) {
+      root.setAttribute("aria-busy", "false");
+      const screen = document.createElement("section");
+      screen.className = "boot";
+      const card = document.createElement("div");
+      card.className = "card";
+      const title = document.createElement("h1");
+      title.textContent = "Aplikasi belum dapat dimuat";
+      const note = document.createElement("p");
+      note.textContent = "Periksa koneksi, release GitHub, dan izin runtime Canvas.";
+      const detail = document.createElement("p");
+      detail.setAttribute("role", "alert");
+      detail.textContent = stage + ": " + (error?.message || "UNKNOWN");
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.textContent = "Coba lagi";
+      retry.addEventListener("click", () => location.reload());
+      card.append(title, note, detail, retry);
+      screen.append(card);
+      root.replaceChildren(screen);
+    }
+
+    async function bootstrap() {
+      try {
+        if (apiKey !== "") throw new Error("PERSONAL_API_KEY_NOT_ALLOWED");
+        stage = "LOAD_MANIFEST";
+        setStatus("Memeriksa versi aplikasi...");
+        const manifest = await loadManifest();
+        console.info("MANIFEST_VALIDATED", manifest.version);
+        stage = "IMPORT_MODULE";
+        setStatus("Memuat modul aplikasi...");
+        const url = CDN + "@" + manifest.release + "/" + ENTRY;
+        const app = await import(url);
+        if (typeof app.mount !== "function") throw new Error("MODULE_MOUNT_NOT_FOUND");
+        console.info("CDN_MODULE_LOADED", manifest.release);
+        stage = "MOUNT_APPLICATION";
+        await app.mount({ root, ai: aiBridge, version: manifest.version });
+        root.setAttribute("aria-busy", "false");
+        stage = "READY";
+        console.info("APP_BOOT_OK", { version: manifest.version, aiAvailable: aiBridge.available });
+      } catch (error) {
+        console.error("APP_BOOT_FAILED", stage, error);
+        showError(error);
+      }
+    }
+    bootstrap();
+  </script>
+</body>
+</html>
