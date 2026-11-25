@@ -1,0 +1,12 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {findFeatures,getFeature} from "../src/core/feature-registry.js";
+import {normalize} from "../src/core/parameters.js";
+import {buildPrompt} from "../src/core/universal-lock.js";
+import {RULES,TEXT_RULES} from "../src/core/parameter-rules.js";
+test("all selectable parameters have semantic directives, excluding transport ratio",()=>{for(const f of findFeatures())for(const p of f.fields){if(p.id==="ratio")continue;if(p.options)for(const v of p.options)assert.ok(RULES[p.id]?.[v],f.id+":"+p.id+":"+v);else assert.ok(TEXT_RULES[p.id],p.id);}});
+test("try on preserves crop and never combines model bodies",()=>{const f=getFeature("virtual-try-on"),p=buildPrompt(f,normalize(f));assert.match(p,/garment-only evidence/);assert.match(p,/pasted head|paste a cutout torso/);assert.match(p,/head-only or tightly cropped/);assert.match(p,/do not synthesize a full body/);});
+test("custom background has explicit precedence, only for background",()=>{const f=getFeature("background"),p=buildPrompt(f,normalize(f,{customBackground:"Burning forest"}));assert.match(p,/Preset superseded/);assert.match(p,/Burning forest/);assert.match(p,/never authorizes subject changes/);assert.match(p,/including monochrome/);});
+test("structured model choices override conflicting brief",()=>{const f=getFeature("ai-model"),p=buildPrompt(f,normalize(f,{subject:"outdoor model in a dress",background:"Studio beige"}));assert.match(p,/seamless light warm beige studio backdrop/);assert.match(p,/Structured selections override/);assert.match(p,/Plain T-shirt and long trousers/);});
+test("notes are subordinate to protected regions",()=>{const f=getFeature("sharpen"),p=buildPrompt(f,normalize(f,{notes:"change face"}));assert.match(p,/never override protected regions/);assert.match(p,/Never reconstruct faces/);});
+test("no actual prompt exceeds shell limit with maximum length user fields",()=>{for(const f of findFeatures()){const input={};for(const p of f.fields)if(!p.options)input[p.id]="a".repeat(p.max||1200);assert.ok(buildPrompt(f,normalize(f,input)).length<=12000,f.id);}});
