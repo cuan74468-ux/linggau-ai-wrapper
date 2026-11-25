@@ -98,11 +98,12 @@ function validateManifest(m,ref=""){
   if(!Number.isInteger(min)||!Number.isInteger(max)||min<1||max<min||max>100||![1,2].includes(bridgeApi))throw Error("MANIFEST_INVALID");
   // The foundation release is read-only; shell API 2 can display that legacy module.
   if(!(min<=SHELL_API&&SHELL_API<=max)&&!(min===1&&max===1&&bridgeApi===1))throw Error("SHELL_UPDATE_REQUIRED");
-  if(ref&&!SHA.test(ref))throw Error("MANIFEST_INVALID");
-  if(m.commit!==undefined&&!SHA.test(m.commit))throw Error("MANIFEST_INVALID");
+  if(ref&&(typeof ref!=="string"||!SHA.test(ref)))throw Error("MANIFEST_INVALID");
+  if(m.commit!==undefined&&(typeof m.commit!=="string"||!SHA.test(m.commit)))throw Error("MANIFEST_INVALID");
   if(ref&&m.commit&&m.commit!==ref)throw Error("MANIFEST_INVALID");
   const commit=ref||m.commit||(m.version==="0.1.0"&&m.release==="0.1.0"&&bridgeApi===1?LEGACY_STABLE:"");
-  if(!SHA.test(commit))throw Error("MANIFEST_INVALID");
+  if(typeof commit!=="string"||!SHA.test(commit))throw Error("MANIFEST_INVALID");
+  if(bridgeApi===1&&(commit!==LEGACY_STABLE||m.version!=="0.1.0"))throw Error("SHELL_UPDATE_REQUIRED");
   if(m.releasedAt!==undefined&&(typeof m.releasedAt!=="string"||!Number.isFinite(Date.parse(m.releasedAt))))throw Error("MANIFEST_INVALID");
   return {name:m.name,version:m.version,entry:m.entry,commit,minShellApi:min,maxShellApi:max,bridgeApi,...(m.releasedAt?{releasedAt:m.releasedAt}:{})};
 }
