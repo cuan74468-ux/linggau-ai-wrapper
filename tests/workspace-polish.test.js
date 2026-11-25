@@ -1,0 +1,10 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+const app=readFileSync(new URL("../src/app.js",import.meta.url),"utf8");
+const css=readFileSync(new URL("../src/styles/studio.css",import.meta.url),"utf8");
+test("accessible native radio controls sync selected value",()=>{assert.match(app,/input.type="radio"/);assert.match(app,/values\[field.id\]=input.value;refresh\(\)/);assert.match(css,/input:checked\+span/);});
+test("photo file and drop use same guarded loader",()=>{assert.match(app,/async function acceptPhoto\(next\)/);assert.match(app,/acceptPhoto\(file.files\[0\]\)/);assert.match(app,/acceptPhoto\(e.dataTransfer.files\[0\]\)/);});
+test("reuse preselects existing asset and removal clears both inputs",()=>{assert.match(app,/picker.value=initial.id/);assert.match(app,/slots\[i\]=null;file.value="";picker.value=""/);});
+test("image results show decoded dimensions rather than requested size",()=>{assert.match(app,/width:dimensions.width,height:dimensions.height/);assert.match(app,/asset.width\+" × "\+asset.height/);});
+test("sticky result stays in desktop and resets in compact workspace",()=>{assert.match(css,/output-panel\{position:sticky/);assert.match(css,/output-panel\{position:static/);});
