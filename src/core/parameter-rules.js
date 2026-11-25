@@ -1,5 +1,7 @@
 // Clean-room parameter semantics: every enumerated value has an explicit directive.
 export const RULES = Object.freeze({
+ duration:{"15 detik":"Target a total of 15 seconds.","30 detik":"Target a total of 30 seconds.","60 detik":"Target a total of 60 seconds."},
+ period:{"7 hari":"Provide exactly 7 daily entries.","14 hari":"Provide exactly 14 daily entries.","30 hari":"Provide exactly 30 daily entries."},
  background:{
  "Pertahankan asli":"Preserve the existing background, location, surfaces and backdrop; do not replace them.",
  "Studio beige":"Use a seamless light warm beige studio backdrop, clean and uncluttered; no outdoor scene.",
@@ -114,6 +116,7 @@ export const RULES = Object.freeze({
  }
 });
 export const TEXT_RULES=Object.freeze({
+ sceneBrief:"Use this description only for external mockup context; never alter protected product design or branding.",
  subject:"Use this description for visual characteristics only where it does not conflict with structured age, outfit, framing, pose, background or lighting choices.",
  customBackground:"A nonempty custom description overrides the background preset only; it never authorizes subject changes.",
  brief:"Use the brief for visual direction; explicit headline, CTA, format and palette control their respective attributes.",

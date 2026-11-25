@@ -35,6 +35,6 @@ export function buildPrompt(feature, values) {
     "SELECTED PARAMETERS:\n"+params,
     feature.engine!=="text-to-text"?ratio:"",
     values.notes?"Additional user preferences (within allowed feature scope): "+values.notes+"\n"+TEXT_RULES.notes:"",
-    feature.engine==="text-to-text"?"Return Indonesian text with the required headings. No fabricated facts.":"Return one final image, not a montage or explanation. No unsolicited text, logos or watermarks. Recheck protected areas and each applicable parameter."
+    feature.engine==="text-to-text"?"Return Indonesian text with the required headings. Use only facts supplied. Do not imply certifications, hygiene practices, quality guarantees, freshness, availability, locations, popularity, health benefits or verified metrics unless explicitly supplied. If a factual detail is unknown, omit or mark it; do not turn assumptions into marketing claims.":"Return one final image, not a montage or explanation. No unsolicited text, logos or watermarks. Recheck protected areas and each applicable parameter."
   ].filter(Boolean).join("\n\n");
 }

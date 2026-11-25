@@ -1,4 +1,5 @@
 import { OPTIONS, select, text, ratio } from "../core/parameters.js";
+import { EXTRA_FEATURES } from "./batch-02.js";
 const bg = (v="Pertahankan asli")=>select("background","Latar",OPTIONS.background,v);
 const light = (v="Softbox natural")=>select("lighting","Pencahayaan",OPTIONS.lighting,v);
 const style = (v="Komersial natural")=>select("style","Gaya visual",OPTIONS.style,v);
@@ -16,4 +17,6 @@ export const FEATURES = Object.freeze([
   {id:"sharpen",title:"Pertajam Foto",category:editor,engine:"image-to-image",slots:["Foto sumber"],description:"Detail lebih jelas tanpa halusinasi.",fields:[select("strength","Intensitas",["Ringan","Sedang","Kuat"],"Ringan"),select("noise","Reduksi noise",["Minimal","Sedang","Kuat"]),select("detail","Prioritas detail",["Seimbang","Tekstur objek","Tulisan dan tepi"]),notes()],recipe:"Improve perceived clarity, reduce mild noise and compression artifacts. Preserve original framing, color, texture, identity and text. Do not reconstruct unreadable text or invent facial details. Avoid halos and oversharpening."},
   {id:"poster",title:"Generator Poster & Banner",category:brand,engine:"text-to-image",slots:[],description:"Desain promosi dari brief dan teks.",fields:[text("brief","Brief desain",true),text("headline","Judul persis",true,120),text("cta","Ajakan bertindak",false,120),select("format","Jenis desain",["Poster promosi","Banner digital","Pengumuman"]),text("palette","Palet warna (opsional)",false,120),style("Minimalis"),ratio("4:5"),notes()],recipe:"Design a commercially useful poster or banner. Prioritize legibility, hierarchy, whitespace and accurate supplied headline/CTA. No invented offers, prices, logos or small filler text. Use only the supplied copy."},
   {id:"seo-caption",title:"Deskripsi Produk SEO & Caption",category:business,engine:"text-to-text",slots:[],description:"Copy siap salin berdasarkan fakta produk.",fields:[text("product","Nama produk dan fakta",true),text("audience","Target pembeli",true,500),select("tone","Nada bahasa",["Natural","Profesional","Persuasif ringan"]),text("keywords","Kata kunci (opsional)",false,300),select("platform","Platform",["Marketplace","Instagram","TikTok","WhatsApp","Website"]),select("goal","Tujuan",["Informasi produk","Penjualan","Edukasi"]),notes()],recipe:"Write useful marketing copy based only on provided facts. Output headings: JUDUL PRODUK, DESKRIPSI SEO, 5 KATA KUNCI SUGESTI, 3 CAPTION, CTA. Suggested keywords are not verified search-volume data."}
+,
+  ...EXTRA_FEATURES
 ]);
