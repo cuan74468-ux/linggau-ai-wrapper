@@ -1,135 +1,121 @@
 <!doctype html>
 <html lang="id">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light">
-  <title>Linggau AI Studio</title>
-  <style>
-    * { box-sizing: border-box; }
-    html { font-family: system-ui, sans-serif; color: #222; background: #f5f5f2; }
-    body { margin: 0; }
-    #app { min-height: 100vh; min-height: 100dvh; }
-    .boot { min-height: 100vh; min-height: 100dvh; display: grid;
-      place-items: center; padding: 20px; }
-    .card { width: 100%; max-width: 400px; padding: 24px;
-      border: 1px solid #deded8; border-radius: 16px; background: #fff; }
-    h1 { font-size: 22px; margin: 0 0 12px; }
-    p { color: #555; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
-    button { min-height: 44px; padding: 12px 20px; width: 100%; border: 0;
-      border-radius: 10px; background: #222; color: #fff; font: inherit; cursor: pointer; }
-    button:focus-visible { outline: 3px solid #777; outline-offset: 3px; }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Linggau AI Studio</title>
+<style>body{margin:0;background:#f7f7f4;color:#202321;font:15px/1.5 system-ui,sans-serif}#app{min-height:100vh}.boot{max-width:460px;margin:32px auto;padding:20px;overflow-wrap:anywhere}button{font:inherit;min-height:44px;cursor:pointer}</style>
 </head>
 <body>
-  <main id="app" aria-busy="true">
-    <section class="boot"><div class="card">
-      <h1>Linggau AI Studio</h1>
-      <p id="boot-status" role="status">Menyiapkan aplikasi...</p>
-      <noscript>JavaScript diperlukan untuk menjalankan aplikasi.</noscript>
-    </div></section>
-  </main>
-  <script type="module">
-    const apiKey = "";
-    const CDN = "https://cdn.jsdelivr.net/gh/cuan74468-ux/linggau-ai-wrapper";
-    const SHELL_API = 1;
-    const ENTRY = "src/app.js";
-    const root = document.getElementById("app");
-    let stage = "INITIALIZATION";
+<main id="app" aria-busy="true"><section class="boot"><h1>Linggau AI Studio</h1><p role="status">Memuat workspace…</p></section></main>
+<script>
+const apiKey = "";
+const CDN = "https://cdn.jsdelivr.net/gh/cuan74468-ux/linggau-ai-wrapper";
+const PREVIEW_REF = ""; // For candidate QA only: set to the reviewed commit SHA.
+const IMAGE_MODEL = "gemini-3.1-flash-image";
+const TEXT_MODEL = "gemini-3-flash-preview";
+const TYPES = ["image/jpeg","image/png","image/webp"];
+const RATIOS = ["1:1","4:5","3:4","4:3","9:16","16:9"];
+const MAX_IMAGE = 8*1024*1024, MAX_TOTAL = 12*1024*1024;
+let inFlight = false;
+let stage = "INIT";
 
-    // Disabled until a supported Canvas AI runtime is verified.
-    // No API keys, private endpoints or AI requests are exposed to modules.
-    const aiBridge = Object.freeze({
-      available: false,
-      provider: "gemini-canvas",
-      mode: "disabled",
-      async editImage() {
-        throw new Error("AI_BRIDGE_NOT_CONNECTED");
-      }
-    });
+function bytes(image) {
+  const b = image?.base64;
+  if (!TYPES.includes(image?.mimeType) || typeof b !== "string" || !b || b.length % 4 ||
+      b.length > Math.ceil(MAX_IMAGE/3)*4 || !/^[A-Za-z0-9+/]+={0,2}$/.test(b)) throw Error("AI_INPUT_INVALID");
+  return b.length*3/4-(b.endsWith("==")?2:b.endsWith("=")?1:0);
+}
 
-    function setStatus(message) {
-      const target = document.getElementById("boot-status");
-      if (target) target.textContent = message;
+function prepare(kind, req) {
+  const {prompt, images=[], aspectRatio} = req || {};
+  if (!["edit","image","text"].includes(kind) || typeof prompt !== "string" || !prompt.trim() || prompt.length>12000 ||
+      !Array.isArray(images) || (kind==="edit" ? images.length<1||images.length>2 : images.length!==0) ||
+      (aspectRatio!==undefined && (!RATIOS.includes(aspectRatio)||kind==="text"))) throw Error("AI_INPUT_INVALID");
+  const sizes=images.map(bytes);
+  if(sizes.some(n=>n>MAX_IMAGE)||sizes.reduce((a,b)=>a+b,0)>MAX_TOTAL) throw Error("IMAGE_LIMIT");
+  const parts=[{text:prompt.trim()},...images.map(i=>({inlineData:{mimeType:i.mimeType,data:i.base64}}))];
+  const generationConfig=kind==="text"?{responseModalities:["TEXT"]}:{responseModalities:["TEXT","IMAGE"]};
+  if(aspectRatio) generationConfig.imageConfig={aspectRatio};
+  return {model:kind==="text"?TEXT_MODEL:IMAGE_MODEL,payload:{contents:[{role:"user",parts}],generationConfig}};
+}
+
+async function request(kind, req) {
+  if(inFlight)throw Error("AI_BUSY");
+  const {model,payload}=prepare(kind,req);
+  inFlight=true;
+  const controller=new AbortController(), start=performance.now();
+  const timer=setTimeout(()=>controller.abort(),120000);
+  try{
+    // Empty key only in the Gemini Canvas context. No alternate credential or fallback.
+    const endpoint="https://generativelanguage.googleapis.com/v1beta/models/"+model+":generateContent?key="+apiKey;
+    const response=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json"},signal:controller.signal,body:JSON.stringify(payload)});
+    if(!response.ok)throw Error("AI_HTTP_"+response.status);
+    const json=await response.json();
+    const candidate=json?.candidates?.[0], parts=candidate?.content?.parts;
+    if(!Array.isArray(parts)||["SAFETY","BLOCKLIST","PROHIBITED_CONTENT","RECITATION"].includes(candidate?.finishReason))throw Error("AI_NO_VALID_OUTPUT");
+    const meta={model,httpStatus:response.status,elapsedMs:Math.round(performance.now()-start)};
+    if(kind==="text"){
+      const text=parts.filter(p=>!p.thought&&typeof p.text==="string").map(p=>p.text).join("\n").trim();
+      if(!text||text.length>40000)throw Error("AI_NO_VALID_TEXT");
+      return {kind:"text",text,...meta};
     }
+    const part=parts.find(p=>!p.thought&&TYPES.includes(p?.inlineData?.mimeType)&&typeof p.inlineData.data==="string");
+    if(!part)throw Error("AI_NO_VALID_IMAGE");
+    const image={mimeType:part.inlineData.mimeType,base64:part.inlineData.data};
+    if(bytes(image)>MAX_IMAGE)throw Error("AI_OUTPUT_INVALID");
+    return {kind:"image",...image,...meta};
+  }catch(e){
+    if(controller.signal.aborted)throw Error("AI_TIMEOUT_120S");
+    throw e;
+  }finally{clearTimeout(timer);inFlight=false;}
+}
 
-    function validateManifest(m) {
-      if (!m || typeof m !== "object" || Array.isArray(m)) {
-        throw new Error("MANIFEST_INVALID");
-      }
-      if (m.shellApi !== SHELL_API) throw new Error("SHELL_API_INCOMPATIBLE");
-      if (m.entry !== ENTRY) throw new Error("ENTRY_NOT_ALLOWED");
-      const pattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-      for (const v of [m.version, m.release]) {
-        if (typeof v !== "string" || v.length > 64 || v !== v.trim() || !pattern.test(v)) {
-          throw new Error("VERSION_FORMAT_INVALID");
-        }
-      }
-      if (m.release !== m.version) throw new Error("VERSION_RELEASE_MISMATCH");
-      return Object.freeze({ version: m.version, release: m.release, entry: ENTRY });
-    }
+const aiBridge=Object.freeze({
+  available:true,
+  editImage:req=>request("edit",req),
+  generateImage:req=>request("image",req),
+  generateText:req=>request("text",req)
+});
 
-    async function loadManifest() {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 15000);
-      try {
-        const response = await fetch(CDN + "@main/manifest.json", {
-          method: "GET", cache: "no-store", credentials: "omit",
-          redirect: "error", signal: controller.signal
-        });
-        if (!response.ok) throw new Error("MANIFEST_HTTP_" + response.status);
-        return validateManifest(await response.json());
-      } finally {
-        clearTimeout(timer);
-      }
-    }
+function validateManifest(m) {
+  const semver=/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+  if(!m||![1,2].includes(m.shellApi)||m.entry!=="src/app.js"||typeof m.version!=="string"||m.version.length>64||!semver.test(m.version)||m.release!==m.version)throw Error("MANIFEST_INCOMPATIBLE");
+  return m;
+}
 
-    function showError(error) {
-      root.setAttribute("aria-busy", "false");
-      const screen = document.createElement("section");
-      screen.className = "boot";
-      const card = document.createElement("div");
-      card.className = "card";
-      const title = document.createElement("h1");
-      title.textContent = "Aplikasi belum dapat dimuat";
-      const note = document.createElement("p");
-      note.textContent = "Periksa koneksi, release GitHub, dan izin runtime Canvas.";
-      const detail = document.createElement("p");
-      detail.setAttribute("role", "alert");
-      detail.textContent = stage + ": " + (error?.message || "UNKNOWN");
-      const retry = document.createElement("button");
-      retry.type = "button";
-      retry.textContent = "Coba lagi";
-      retry.addEventListener("click", () => location.reload());
-      card.append(title, note, detail, retry);
-      screen.append(card);
-      root.replaceChildren(screen);
-    }
-
-    async function bootstrap() {
-      try {
-        if (apiKey !== "") throw new Error("PERSONAL_API_KEY_NOT_ALLOWED");
-        stage = "LOAD_MANIFEST";
-        setStatus("Memeriksa versi aplikasi...");
-        const manifest = await loadManifest();
-        console.info("MANIFEST_VALIDATED", manifest.version);
-        stage = "IMPORT_MODULE";
-        setStatus("Memuat modul aplikasi...");
-        const url = CDN + "@" + manifest.release + "/" + ENTRY;
-        const app = await import(url);
-        if (typeof app.mount !== "function") throw new Error("MODULE_MOUNT_NOT_FOUND");
-        console.info("CDN_MODULE_LOADED", manifest.release);
-        stage = "MOUNT_APPLICATION";
-        await app.mount({ root, ai: aiBridge, version: manifest.version });
-        root.setAttribute("aria-busy", "false");
-        stage = "READY";
-        console.info("APP_BOOT_OK", { version: manifest.version, aiAvailable: aiBridge.available });
-      } catch (error) {
-        console.error("APP_BOOT_FAILED", stage, error);
-        showError(error);
-      }
-    }
-    bootstrap();
-  </script>
+/* BOOTSTRAP */
+(async()=>{
+  const root=document.getElementById("app");
+  try{
+    if(apiKey!==""||PREVIEW_REF&&!/^[0-9a-f]{40}$/.test(PREVIEW_REF))throw Error("SHELL_CONFIG_INVALID");
+    stage="MANIFEST";
+    const controller=new AbortController(), timer=setTimeout(()=>controller.abort(),15000);
+    let manifest;
+    try{
+      const res=await fetch(CDN+"@"+(PREVIEW_REF||"main")+"/manifest.json",{cache:"no-store",credentials:"omit",redirect:"error",signal:controller.signal});
+      if(!res.ok)throw Error("MANIFEST_HTTP_"+res.status);
+      manifest=validateManifest(await res.json());
+    }finally{clearTimeout(timer);}
+    stage="MODULE";
+    const url=CDN+"@"+(PREVIEW_REF||manifest.release)+"/"+manifest.entry;
+    const app=await import(url);
+    if(typeof app.mount!=="function")throw Error("MOUNT_MISSING");
+    stage="MOUNT";
+    // v0.1.0 remains a rollback target without an active AI bridge.
+    const bridge=manifest.shellApi===1?Object.freeze({available:false,async editImage(){throw Error("AI_BRIDGE_NOT_CONNECTED");}}):aiBridge;
+    await app.mount({root,ai:bridge,version:manifest.version});
+    root.setAttribute("aria-busy","false");
+    console.info("APP_BOOT_OK",manifest.version,PREVIEW_REF?"PREVIEW":"STABLE");
+  }catch(e){
+    root.setAttribute("aria-busy","false");
+    const section=document.createElement("section");section.className="boot";
+    const title=document.createElement("h1");title.textContent="Workspace belum dapat dimuat";
+    const message=document.createElement("p");message.textContent=stage+": "+String(e?.message||e);
+    const retry=document.createElement("button");retry.textContent="Coba lagi";retry.onclick=()=>location.reload();
+    section.append(title,message,retry);root.replaceChildren(section);
+  }
+})();
+</script>
 </body>
 </html>
