@@ -92,3 +92,5 @@
 @media(max-width:700px){#studio .top{position:sticky;top:0;z-index:5}#studio .sidebar{position:static;max-height:65dvh}#studio .choice-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,126px),1fr))}#studio .ratio-grid{grid-template-columns:repeat(3,minmax(0,1fr))}#studio .source-preview img{max-height:180px}#studio .result-placeholder{min-height:160px}}
 
 #studio .workspace{scroll-margin-top:92px}
+
+#studio .quality-panel{margin:14px 0;border:1px solid var(--line);border-radius:10px;background:#f8faf7;padding:12px}#studio .quality-panel summary{min-height:44px;cursor:pointer;display:list-item;padding:9px 0;font-weight:650}#studio .quality-panel p{font-size:13px;margin:6px 0}#studio .quality-panel .quality-pass{color:#235c3c}#studio .quality-panel .quality-warn{color:#80501d}#studio .quality-panel strong{display:block;margin-top:12px}#studio .quality-panel img{max-height:240px}
