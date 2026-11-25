@@ -14,18 +14,52 @@ export async function mount({root,ai,version}){
   const css=el("link");css.rel="stylesheet";css.href=new URL("./styles/studio.css",import.meta.url).href;
   const studio=el("section");studio.id="studio";
   const top=el("header",null,"top");
-  const brand=el("div");brand.append(el("strong","Linggau AI Studio"),el("small","Workspace kreatif · v"+version));
-  const ready=el("small","Bridge: "+(client.available().imageToImage?"tersedia · autentikasi diuji saat proses":"tidak terhubung"));
-  top.append(brand,ready);
-  const nav=el("nav",null,"nav"), view=el("main"), global=el("p",null,"status");global.setAttribute("role","status");global.hidden=true;
-  studio.append(top,nav,global,view);root.replaceChildren(css,studio);
-  let active=false, viewEpoch=0, current=null, slots=[], query="", category="all", result=null;
+  const brand=el("div",null,"brand");
+  brand.append(el("span","L","brandmark"));
+  const identity=el("div");identity.append(el("strong","Linggau AI Studio"),el("small","Workspace kreatif · v"+version));brand.append(identity);
+  const ready=el("small",client.available().imageToImage?"AI Bridge tersedia · akses diuji saat proses":"AI Bridge tidak terhubung","bridge-status");
+  const toggle=button("☰  Alat AI",()=>setDrawer(!drawerOpen),"menu-toggle");toggle.setAttribute("aria-controls","studio-sidebar");toggle.setAttribute("aria-expanded","false");
+  top.append(brand,ready,toggle);
+  const sidebar=el("aside",null,"sidebar");sidebar.id="studio-sidebar";
+  const nav=el("nav",null,"nav");nav.setAttribute("aria-label","Seluruh alat AI");
+  const view=el("div",null,"workspace");view.id="studio-workspace";view.setAttribute("role","region");view.setAttribute("aria-label","Area kerja");view.tabIndex=-1;
+  const global=el("p",null,"status");global.setAttribute("role","status");global.hidden=true;
+  const work=el("div",null,"work");work.append(global,view);
+  const frame=el("div",null,"frame");sidebar.append(nav);frame.append(sidebar,work);
+  studio.append(top,frame);root.replaceChildren(css,studio);
+  let active=false, viewEpoch=0, current=null, slots=[], query="", category="all", result=null, drawerOpen=false, page="home";
   const tell=t=>{global.textContent=t;global.hidden=!t;};
-  function setNav(){for(const b of nav.querySelectorAll("button"))b.disabled=active;}
-  function change(fn){if(active)return;++viewEpoch;tell("");fn();}
-  nav.append(button("Studio",()=>change(catalog)),button("Riwayat sesi",()=>change(history)),button("Bersihkan sesi",()=>change(()=>{if(!window.confirm("Hapus semua hasil sesi dan input aktif?"))return;store.clear();slots=[];result=null;current=null;catalog();tell("Riwayat dan input sesi dibersihkan.");})));
+  function setDrawer(open){drawerOpen=open;studio.classList.toggle("drawer-open",open);toggle.setAttribute("aria-expanded",String(open));}
+  studio.addEventListener("keydown",e=>{if(e.key==="Escape"&&drawerOpen){setDrawer(false);toggle.focus();}});
+  function setNav(){for(const b of nav.querySelectorAll("button, input"))b.disabled=active;}
+  function change(fn){if(active)return;++viewEpoch;tell("");setDrawer(false);fn();renderNavigation();view.focus({preventScroll:true});view.scrollIntoView({block:"start"});}
+  const home=button("Beranda",()=>change(catalog),"nav-main");
+  const recent=button("Riwayat hasil",()=>change(history),"nav-main");
+  const clear=button("Bersihkan sesi",()=>change(()=>{if(!window.confirm("Hapus semua hasil sesi dan input aktif?"))return;store.clear();slots=[];result=null;current=null;catalog();tell("Riwayat dan input sesi dibersihkan.");}),"nav-main");
+  const sideSearch=el("input");sideSearch.type="search";sideSearch.placeholder="Cari alat AI…";sideSearch.setAttribute("aria-label","Cari alat di sidebar");
+  const groups=el("div",null,"nav-groups");
+  const opened=new Set(CATEGORIES);
+  nav.append(home,recent,sideSearch,groups,clear);
+  sideSearch.addEventListener("input",renderNavigation);
+  function renderNavigation(){
+    home.setAttribute("aria-current",page==="home"?"page":"false");
+    recent.setAttribute("aria-current",page==="history"?"page":"false");
+    recent.textContent="Riwayat hasil ("+store.list().length+")";
+    groups.replaceChildren();
+    const matches=findFeatures(sideSearch.value);
+    for(const cat of CATEGORIES){
+      const tools=matches.filter(f=>f.category===cat);if(!tools.length)continue;
+      const details=el("details",null,"nav-category");details.open=!!sideSearch.value.trim()||opened.has(cat)||tools.some(f=>f.id===current?.id);
+      const summary=el("summary",cat);details.append(summary);
+      details.addEventListener("toggle",()=>{if(!sideSearch.value.trim()){if(details.open)opened.add(cat);else opened.delete(cat);}});
+      for(const f of tools){const item=button(f.title,()=>change(()=>workspace(f)),"nav-tool");item.setAttribute("aria-current",current?.id===f.id?"page":"false");details.append(item);}
+      groups.append(details);
+    }
+    if(!matches.length)groups.append(el("p","Alat tidak ditemukan.","empty"));
+    setNav();
+  }
   function catalog(){
-    current=null;slots=[];result=null;view.replaceChildren(el("h1","Ruang kerja kreatif"),el("p","Pilih alat AI untuk foto, desain, atau kebutuhan bisnis."));
+    page="home";current=null;slots=[];result=null;view.replaceChildren(el("h1","Ruang kerja kreatif"),el("p","Pilih alat dari sidebar atau katalog di bawah. Setiap alat memiliki pengaturan dan hasil tersendiri."));
     const search=el("input");search.type="search";search.placeholder="Cari fitur...";search.value=query;search.setAttribute("aria-label","Cari fitur");
     const filter=el("select");filter.setAttribute("aria-label","Kategori");
     for(const c of ["all",...CATEGORIES]){const option=el("option",c==="all"?"Semua kategori":c);option.value=c;filter.append(option);}filter.value=category;
@@ -52,16 +86,17 @@ export async function mount({root,ai,version}){
     }
   }
   function history(){
-    current=null;slots=[];result=null;view.replaceChildren(el("h1","Riwayat hasil sesi"),el("p","Hanya di memori. Maksimal 10 hasil, dapat berkurang sesuai batas memori. Hilang saat halaman ditutup atau dimuat ulang."));
+    page="history";current=null;slots=[];result=null;view.replaceChildren(el("h1","Riwayat hasil sesi"),el("p","Hanya di memori. Maksimal 10 hasil, dapat berkurang sesuai batas memori. Hilang saat halaman ditutup atau dimuat ulang."));
     const grid=el("div",null,"grid");view.append(grid);
     for(const a of store.list()){const c=el("article",null,"card");resultCard(a,c);c.append(el("small","Asal aset: "+(a.parents.join(", ")||"input baru")),button("Hapus hasil",()=>change(()=>{store.remove(a.id);history();})));grid.append(c);}
     if(!store.list().length)grid.append(el("p","Belum ada hasil.","empty"));
   }
   function workspace(f,initial=null,initialIndex=0){
-    current=f;slots=f.slots.map(()=>null);result=null;if(initial)slots[initialIndex]=initial;
+    page="tool";current=f;slots=f.slots.map(()=>null);result=null;if(initial)slots[initialIndex]=initial;
     const epoch=viewEpoch;let loading=0;const revisions=f.slots.map(()=>0);const values={};const inputs=[];
-    view.replaceChildren(button("Kembali ke Studio",()=>change(catalog)),el("h1",f.title),el("p",f.description));
-    const layout=el("div",null,"layout"), form=el("section",null,"card"), output=el("section",null,"card");
+    const heading=el("div",null,"tool-heading");heading.append(el("small",f.category),el("h1",f.title),el("p",f.description));view.replaceChildren(heading);
+    const layout=el("div",null,"layout"), form=el("section",null,"card input-panel"), output=el("section",null,"card output-panel");
+    form.append(el("h2",f.slots.length?"1. Foto referensi":"1. Brief & pengaturan"));
     const status=el("p","Siap menerima input.","status");status.setAttribute("role","status");
     const run=button("Proses AI",process,"primary"), retry=button("Coba Lagi",process);retry.hidden=true;
     function refresh(){const disabled=active||loading>0;run.disabled=disabled||slots.some(x=>!x)||!client.available()[{"image-to-image":"imageToImage","text-to-image":"textToImage","text-to-text":"textToText"}[f.engine]];retry.disabled=run.disabled;inputs.forEach(x=>x.disabled=disabled);setNav();}
@@ -74,14 +109,15 @@ export async function mount({root,ai,version}){
       function draw(){preview.replaceChildren();if(slots[i])preview.append(image(slots[i]),el("small",slots[i].id?"Aset sesi "+slots[i].id:"Foto perangkat"));else preview.append(el("small","Belum ada foto"));}
       file.addEventListener("change",async()=>{if(active)return;const rev=++revisions[i];slots[i]=null;draw();loading++;refresh();try{const a=await readImage(file.files?.[0]);if(epoch===viewEpoch&&rev===revisions[i]){slots[i]=a;status.textContent="Foto valid.";}}catch(e){if(epoch===viewEpoch&&rev===revisions[i]){file.value="";status.textContent=friendlyError(e);}}finally{loading--;if(epoch===viewEpoch){draw();refresh();}}});
       picker.addEventListener("change",()=>{if(active)return;++revisions[i];slots[i]=store.get(picker.value)||null;file.value="";draw();refresh();});
-      inputs.push(file,picker);form.append(label,file,picker,preview);draw();
+      const upload=el("div",null,"upload-zone");upload.append(label,file,el("small","JPG, PNG, WebP · maks. 8 MB per foto"),picker,preview);inputs.push(file,picker);form.append(upload);draw();
     });
+    if(f.slots.length)form.append(el("h2","2. Pengaturan edit","section-heading"));
     for(const field of f.fields){const id="param-"+field.id,label=el("label",field.label+(field.required?" *":""));label.htmlFor=id;const input=el(field.options?"select":"textarea");input.id=id;
       if(field.options)for(const val of field.options){const o=el("option",val);o.value=val;input.append(o);}else{input.rows=3;input.maxLength=field.max||1200;}
       input.value=field.default||"";values[field.id]=input.value;input.addEventListener("input",()=>{values[field.id]=input.value;});inputs.push(input);form.append(label,input);
     }
     form.append(el("small","Foto dikirim ke layanan Gemini saat Anda menekan Proses AI. Hindari data sensitif; kebijakan retensi Google tetap berlaku."),el("small","Preservasi visual diupayakan, bukan penguncian piksel."),status);
-    const actions=el("div",null,"actions");actions.append(run,retry);form.append(actions);output.append(el("p","Hasil akan muncul di sini.","empty"));layout.append(form,output);view.append(layout);refresh();
+    const actions=el("div",null,"actions");actions.append(run,retry);form.append(actions);output.append(el("h2","Hasil kerja"),el("p","Hasil akan muncul di sini setelah proses AI selesai.","empty result-placeholder"));layout.append(form,output);view.append(layout);refresh();
     async function process(){
       if(active||loading||slots.some(x=>!x))return;
       active=true;retry.hidden=true;result=null;output.replaceChildren(el("p","Memproses…","empty"));status.textContent="Mengirim satu permintaan AI…";refresh();
@@ -89,10 +125,10 @@ export async function mount({root,ai,version}){
         const res=await client.execute(f,{...values},slots);
         if(res.kind==="image")await decodeImage(res);
         result=store.add(res,f.id,slots.filter(x=>x.id).map(x=>x.id));resultCard(result,output);
-        status.textContent="AI: SUCCESS · HTTP "+res.httpStatus+" · "+res.elapsedMs+" ms";
+        status.textContent="AI: SUCCESS · HTTP "+res.httpStatus+" · "+res.elapsedMs+" ms";renderNavigation();
       }catch(e){output.replaceChildren(el("p","Tidak ada hasil yang valid.","empty"));status.textContent=friendlyError(e);retry.hidden=false;}
       finally{active=false;refresh();}
     }
   }
-  catalog();
+  catalog();renderNavigation();
 }
