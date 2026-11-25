@@ -21,7 +21,8 @@ async function run(){
  await mount({root:document.querySelector("#app"),ai:bridge,version:"test",revision:"browser"});
  await wait(()=>document.querySelector("#studio .mobile-rail"),"mobile nav");
  const nav=document.querySelector("#studio .mobile-rail");
- assert(nav.scrollWidth>nav.clientWidth,"scrollable rail");
+ await wait(()=>nav.clientWidth>0&&getComputedStyle(nav).overflowX==="auto","mobile stylesheet ready: "+window.innerWidth);
+ assert(nav.scrollWidth>nav.clientWidth,"scrollable rail: "+nav.scrollWidth+"/"+nav.clientWidth+" viewport "+window.innerWidth);
  const background=nav.querySelector('[aria-label="Ubah Background"]');assert(background,"background tool");background.click();
  const input=document.querySelector("#photo-0");
  const blob=await new Promise(r=>sample.toBlob(r,"image/png"));const transfer=new DataTransfer();transfer.items.add(new File([blob],"synthetic.png",{type:"image/png"}));input.files=transfer.files;input.dispatchEvent(new Event("change",{bubbles:true}));
