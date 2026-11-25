@@ -3,5 +3,5 @@
   "version": "0.2.0",
   "shellApi": 2,
   "entry": "src/app.js",
-  "commit": "7e34708f8fa5d3a09c0620cc82b80292e92039f6"
+  "commit": "06ee64a59da8d3cea5bbbbded26f1c2348a8303a"
 }
