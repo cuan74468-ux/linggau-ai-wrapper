@@ -21,3 +21,6 @@ All 16 tools have a professional skill profile, explicit parameter semantics and
 
 ## P0 acceptance
 See [manual QA ledger](docs/p0-acceptance.md). One generate produces one final deliverable; no alternatives or automatic AI retry. Preview promotion only after CI; commercial release remains blocked pending actual runtime QA and policy review.
+
+## Mutable pointer refresh correction
+The original shell fetched the mutable preview pointer from jsDelivr, whose branch cache can last 12 hours. The revised shell reads mutable manifests directly from public GitHub Raw, with browser cache disabled, and imports executable modules only by reviewed immutable commit or release from jsDelivr. GitHub Raw may still cache or fail in Canvas; no instantaneous freshness or CORS guarantee. No automatic stale-manifest fallback. A one-time shell migration and runtime verification are required. The existing manual recovery remains available. See https://github.com/jsdelivr/jsdelivr#caching.

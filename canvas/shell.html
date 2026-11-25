@@ -91,6 +91,12 @@ function validateChannel(m){
   if(!m||m.shellApi!==2||m.entry!=="src/app.js"||typeof m.commit!=="string"||!/^[0-9a-f]{40}$/.test(m.commit)||typeof m.version!=="string"||!/^0\.\d+\.\d+$/.test(m.version))throw Error("CHANNEL_MANIFEST_INVALID");
   return m;
 }
+function mutableManifestURL(channel){
+  const root="https://raw.githubusercontent.com/cuan74468-ux/linggau-ai-wrapper/";
+  if(channel==="preview")return root+"preview-channel/channel.json";
+  if(channel==="stable")return root+"main/manifest.json";
+  throw Error("CHANNEL_INVALID");
+}
 function deadline(promise, ms, code) {
   let timer;
   return Promise.race([promise,new Promise((_,reject)=>{
@@ -115,8 +121,8 @@ async function bootstrap(ref=PREVIEW_REF){
     try{
       manifest=await deadline((async()=>{
         const channel=!ref&&UPDATE_CHANNEL==="preview";
-        const path=channel?"@preview-channel/channel.json":"@"+(ref||"main")+"/manifest.json";
-        const res=await fetch(CDN+path,{cache:"no-store",credentials:"omit",redirect:"error",signal:controller.signal});
+        const manifestURL=ref?CDN+"@"+ref+"/manifest.json":mutableManifestURL(UPDATE_CHANNEL);
+        const res=await fetch(manifestURL,{cache:"no-store",credentials:"omit",redirect:"error",signal:controller.signal});
         if(!res.ok)throw Error("MANIFEST_HTTP_"+res.status);
         return channel?validateChannel(await res.json()):validateManifest(await res.json());
       })(),15000,"MANIFEST_TIMEOUT_15S");
