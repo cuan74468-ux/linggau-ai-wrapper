@@ -177,7 +177,7 @@ export async function mount({root,ai,version,revision=""}){
   function workspace(f,initial=null,initialIndex=0){
     page="tool";current=f;slots=f.slots.map(()=>null);result=null;if(initial)slots[initialIndex]=initial;
     const epoch=viewEpoch;let loading=0;const revisions=f.slots.map(()=>0);const values={};const inputs=[];const radios=new Map();const fieldGroups=new Map();
-    const localSharpen=f.id==="sharpen",precisionSupported=supportsPrecision(f.id);let precision=precisionSupported,points=[],maskSource=null,maskCanvas=null,maskImage=null,maskControls=[];
+    const localSharpen=f.id==="sharpen",precisionSupported=supportsPrecision(f.id);let precision=precisionSupported,points=[],maskSource=undefined,maskCanvas=null,maskImage=null,maskControls=[];
     const heading=el("div",null,"tool-heading");heading.append(el("small",f.category),el("h1",f.title),el("p",f.description));view.replaceChildren(heading);
     const layout=el("div",null,"layout"), form=el("section",null,"card input-panel"), output=el("section",null,"card output-panel");
     form.id="studio-input";output.id="studio-output";
@@ -193,7 +193,8 @@ export async function mount({root,ai,version,revision=""}){
       const disabled=active||loading>0;
       let available=client.available()[{"image-to-image":"imageToImage","text-to-image":"textToImage","text-to-text":"textToText"}[f.engine]];
       if(localSharpen)available=true;
-      if(precision){try{available=validPolygon(points)&&(!!backdropPlan(values).color||client.available().textToImage);}catch{available=false;}}
+      if(precision){try{available=!!maskImage&&validPolygon(points)&&(!!backdropPlan(values).color||client.available().textToImage);}catch{available=false;}}
+      form.classList.toggle("precision-active",precision);
       run.disabled=disabled||slots.some(x=>!x)||f.fields.some(p=>p.required&&!String(values[p.id]||"").trim())||!available;retry.disabled=run.disabled;
       inputs.forEach(x=>x.disabled=disabled);maskControls.forEach(x=>x.disabled=disabled);
       if(maskCanvas)maskCanvas.style.pointerEvents=disabled?"none":"auto";
@@ -205,10 +206,10 @@ export async function mount({root,ai,version,revision=""}){
     if(precisionSupported){
       const modeLabel=el("label","Metode edit");modeLabel.htmlFor="precision-mode";
       const mode=el("select");mode.id="precision-mode";for(const [v,t] of [["strict","Presisi objek (tandai objek)"],["ai","Edit generatif (wajah dapat berubah)"]]){const o=el("option",t);o.value=v;mode.append(o);}
-      const explanation=el("small","Mode presisi mempertahankan piksel asli di dalam area yang ditandai. Rasio dan cahaya objek tidak diubah.");
+      const explanation=el("small","Mode presisi mempertahankan piksel asli yang ditandai penuh. Rasio dan cahaya objek tetap. Maks. 4 megapiksel.");
       precisionPanel.append(explanation,maskArea);
       mode.addEventListener("change",()=>{precision=mode.value==="strict";precisionPanel.hidden=!precision;presetPicker.value="";refresh();});
-      form.append(modeLabel,mode,precisionPanel);inputs.push(mode);
+      form.append(modeLabel,mode);inputs.push(mode);
     }
     function drawMask(){
       if(!maskCanvas||!maskImage)return;const ctx=maskCanvas.getContext("2d");if(!ctx)return;
@@ -223,10 +224,10 @@ export async function mount({root,ai,version,revision=""}){
       canvas.setAttribute("aria-label","Ketuk titik mengelilingi objek yang ingin dipertahankan");
       const count=el("small","0 titik");
       const update=()=>{count.textContent=points.length+" titik · "+(validPolygon(points)?"siap diproses":"minimal 3 titik");drawMask();refresh();};
-      img.onload=()=>{if(maskSource!==source||maskCanvas!==canvas)return;const s=Math.min(1,800/Math.max(img.naturalWidth,img.naturalHeight));canvas.width=Math.max(1,Math.round(img.naturalWidth*s));canvas.height=Math.max(1,Math.round(img.naturalHeight*s));maskImage=img;drawMask();refresh();};
+      img.onload=()=>{if(maskSource!==source||maskCanvas!==canvas)return;const s=Math.min(1,600/Math.max(img.naturalWidth,img.naturalHeight));canvas.width=Math.max(1,Math.round(img.naturalWidth*s));canvas.height=Math.max(1,Math.round(img.naturalHeight*s));maskImage=img;drawMask();refresh();};
       img.onerror=()=>{if(maskSource===source)count.textContent="Foto tidak dapat dibuka.";};
       img.src="data:"+source.mimeType+";base64,"+source.base64;
-      canvas.addEventListener("click",e=>{if(active||loading||!maskImage||points.length>=300)return;const r=canvas.getBoundingClientRect();points.push([Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),Math.max(0,Math.min(1,(e.clientY-r.top)/r.height))]);update();});
+      canvas.addEventListener("click",e=>{if(active||loading||!maskImage||points.length>=300)return;const r=canvas.getBoundingClientRect();if(!canvas.clientWidth||!canvas.clientHeight)return;points.push([Math.max(0,Math.min(1,(e.clientX-r.left-canvas.clientLeft)/canvas.clientWidth)),Math.max(0,Math.min(1,(e.clientY-r.top-canvas.clientTop)/canvas.clientHeight))]);update();});
       const undo=button("Urungkan titik",()=>{if(active)return;points.pop();update();}),reset=button("Ulangi tanda",()=>{if(active)return;points=[];update();});
       maskControls=[undo,reset];const actions=el("div",null,"actions");actions.append(undo,reset);
       maskArea.append(el("small","Ketuk titik mengikuti keliling objek. Area hijau dipertahankan. Tutup garis dengan mengelilingi seluruh objek; garis terakhir ditutup otomatis."),canvas,count,actions);
@@ -275,7 +276,7 @@ export async function mount({root,ai,version,revision=""}){
       }
     }
     const info=el("details",null,"tool-info");info.append(el("summary","Privasi & informasi"),el("p",localSharpen?"Foto diproses di browser, tanpa dikirim ke Gemini.":precisionSupported?"Mode presisi memproses foto asli di browser; hanya deskripsi latar yang dikirim ke Gemini jika diperlukan. Mode generatif mengirim foto ke Gemini dan dapat mengubah wajah.":"Input dikirim ke Gemini saat diproses. Preservasi visual adalah upaya model, bukan penguncian piksel."));form.append(info,status);
-    const actions=el("div",null,"actions");actions.append(run,retry);form.append(actions);output.append(el("h2","Hasil kerja"),el("p","Hasil akan muncul di sini setelah proses AI selesai.","empty result-placeholder"));layout.append(form,output);view.append(layout);refresh();
+    const actions=el("div",null,"actions");actions.append(run,retry);form.append(actions);output.append(el("h2","Hasil kerja"),el("p","Hasil akan muncul di sini setelah pemrosesan selesai.","empty result-placeholder"));layout.append(form,output);view.append(layout);refresh();
     async function process(){
       if(active||loading||run.disabled||slots.some(x=>!x))return;
       active=true;retry.hidden=true;result=null;output.replaceChildren(el("p","Memproses…","empty"));status.textContent=localSharpen||precision?"Memproses foto…":"Mengirim satu permintaan AI…";refresh();
