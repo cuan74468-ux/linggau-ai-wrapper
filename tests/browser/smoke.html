@@ -37,7 +37,7 @@ async function run(){
  nav.querySelector('[aria-label="Foto Produk Profesional"]').click();
  assert(document.querySelector("#precision-mode").value==="strict","product defaults to precision");
  assert(document.querySelector("#param-notes").parentElement.hidden,"hidden unsupported notes");
- assert(document.querySelectorAll(".mobile-item").length===18,"all tools remain accessible");
+ assert(document.querySelectorAll(".mobile-item").length===29,"all tools remain accessible");
  window.__smoke={ok:true,detail:"PNG round-trip, local sharpen, 360px workspace, alpha upload, review and product mode passed"};
 }
 run().catch(e=>{window.__smoke={ok:false,detail:e.stack||String(e)}});

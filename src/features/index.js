@@ -1,5 +1,6 @@
 import { OPTIONS, select, text, ratio } from "../core/parameters.js";
 import { EXTRA_FEATURES } from "./batch-02.js";
+import {PROFESSION_CATEGORIES,PROFESSION_FEATURES} from "./professions.js";
 const bg = (v="Pertahankan asli")=>select("background","Latar",OPTIONS.background,v);
 const light = (v="Softbox natural")=>select("lighting","Pencahayaan",OPTIONS.lighting,v);
 const style = (v="Komersial natural")=>select("style","Gaya visual",OPTIONS.style,v);
@@ -7,7 +8,7 @@ const angle = ()=>select("angle","Sudut kamera",OPTIONS.angle);
 const notes = ()=>text("notes","Catatan tambahan",false,500);
 const visual = (background="Studio beige")=>[bg(background),light(),style(),angle(),ratio(),notes()];
 const studio = "Studio Foto & Model AI", editor = "Editor & Manipulasi Visual", brand = "Branding & Desain Komersial", business = "Copywriting, Strategi & Bisnis";
-export const CATEGORIES = Object.freeze([studio,editor,brand,business]);
+export const CATEGORIES = Object.freeze([studio,editor,brand,business,...PROFESSION_CATEGORIES]);
 export const FEATURES = Object.freeze([
   {id:"product-photo",title:"Foto Produk Profesional",category:studio,engine:"image-to-image",slots:["Foto produk"],description:"Foto katalog dan promosi dari produk asli.",fields:[...visual().slice(0,-1),select("composition","Komposisi",["Pertahankan asli","Produk di tengah","Ruang kosong untuk teks"]),select("props","Properti pendukung",["Tanpa tambahan","Properti sederhana yang relevan"]),notes()],recipe:"Edit the product photo into a commercial photograph. Preserve product design and exact readable label. Only adjust requested setting, lighting and framing. If a requested angle reveals unknown product details, preserve source angle."},
   {id:"food-photo",title:"Foto Makanan Profesional",category:studio,engine:"image-to-image",slots:["Foto makanan"],description:"Presentasi kuliner tanpa mengganti hidangan.",fields:[...visual("Kayu natural").slice(0,-1),select("scene","Suasana",["Meja makan natural","Editorial restoran","Katalog menu bersih"]),select("props","Properti pendukung",["Pertahankan asli","Minimal, tanpa menambah bahan makanan"]),notes()],recipe:"Make an editorial food photo. Preserve the dish, visible ingredients, serving quantity, plate and original lettering. Do not fabricate ingredients or alter the recipe. Only adjust selected scene and light."},
@@ -18,5 +19,6 @@ export const FEATURES = Object.freeze([
   {id:"poster",title:"Generator Poster & Banner",category:brand,engine:"text-to-image",slots:[],description:"Desain promosi dari brief dan teks.",fields:[text("brief","Brief desain",true),text("headline","Judul persis",true,120),text("cta","Ajakan bertindak",false,120),select("format","Jenis desain",["Poster promosi","Banner digital","Pengumuman"]),text("palette","Palet warna (opsional)",false,120),style("Minimalis"),ratio("4:5"),notes()],recipe:"Design a commercially useful poster or banner. Prioritize legibility, hierarchy, whitespace and accurate supplied headline/CTA. No invented offers, prices, logos or small filler text. Use only the supplied copy."},
   {id:"seo-caption",title:"Deskripsi Produk SEO & Caption",category:business,engine:"text-to-text",slots:[],description:"Copy siap salin berdasarkan fakta produk.",fields:[text("product","Nama produk dan fakta",true),text("audience","Target pembeli",true,500),select("tone","Nada bahasa",["Natural","Profesional","Persuasif ringan"]),text("keywords","Kata kunci (opsional)",false,300),select("platform","Platform",["Marketplace","Instagram","TikTok","WhatsApp","Website"]),select("goal","Tujuan",["Informasi produk","Penjualan","Edukasi"]),notes()],recipe:"Write useful marketing copy based only on provided facts. Output headings: JUDUL PRODUK, DESKRIPSI SEO, 5 KATA KUNCI SUGESTI, CAPTION, CTA. Suggested keywords are not verified search-volume data."}
 ,
-  ...EXTRA_FEATURES
+  ...EXTRA_FEATURES,
+  ...PROFESSION_FEATURES
 ]);

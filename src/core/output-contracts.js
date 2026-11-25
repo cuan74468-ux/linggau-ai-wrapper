@@ -1,5 +1,7 @@
+import {PROFESSION_CONTRACTS} from "../features/professions.js";
 // Strict, human-readable text output contract. No extra AI call or automatic repair.
 export const TEXT_CONTRACTS=Object.freeze({
+ ...PROFESSION_CONTRACTS,
  "seo-caption":{headings:["JUDUL PRODUK","DESKRIPSI SEO","5 KATA KUNCI SUGESTI","CAPTION","CTA"],instruction:"Use exactly these standalone headings in order: JUDUL PRODUK, DESKRIPSI SEO, 5 KATA KUNCI SUGESTI, CAPTION, CTA. Each section has nonempty content. In the keyword section write exactly five distinct entries, numbered 1. through 5., one per line. Produce one final caption only, not alternatives. CTA must not invent an ordering channel, address or availability."},
  "tiktok-ideas":{headings:["HOOK","VISUAL","ALUR","CTA"],instruction:"Deliver one production-ready TikTok concept, not five alternatives. Use exactly these standalone headings in order: HOOK, VISUAL, ALUR, CTA. Write a specific opening, feasible shot direction, sequential action and one honest CTA."},
  "ad-script":{headings:["KONSEP","ADEGAN & WAKTU","NARASI","TEKS LAYAR","CTA"],instruction:"Use exactly these standalone headings in order: KONSEP, ADEGAN & WAKTU, NARASI, TEKS LAYAR, CTA. In ADEGAN & WAKTU use one line per shot in format 0-5s | action (integer seconds, contiguous intervals starting at zero and ending exactly at selected duration). Use corresponding shot numbers in narration and screen text. One final script, not alternatives."},
@@ -38,6 +40,16 @@ export function checkText(featureId,values,text){
  if(featureId==="content-calendar"){
    const days=parts.filter(p=>p.heading==="HARI");
    checks.push(check("Hari berurutan sesuai periode",days.length===rows&&days.every((p,i)=>p.body===String(i+1))));
+ }
+ if(featureId==="quiz-rubric"){
+   const n=Number.parseInt(values.questionCount,10),get=h=>parts.find(p=>p.heading===h)?.body||"";
+   const numbered=s=>s.split(/\r?\n/).filter(x=>x.trim()).map(l=>l.match(/^\s*(\d+)[.)]\s+(.+)$/));
+   const q=numbered(get("SOAL")),a=numbered(get("KUNCI & PEMBAHASAN"));
+   const ordered=arr=>Number.isInteger(n)&&arr.length===n&&arr.every((m,i)=>m&&+m[1]===i+1);
+   checks.push(check("Jumlah dan urutan soal/kunci",ordered(q)&&ordered(a)));
+   const weights=a.map(m=>m?.[2].match(/\|\s*Pembahasan:\s*(\S.*?)\s*\|\s*Bobot:\s*(\d+)\s*$/i));
+   checks.push(check("Pembahasan dan bobot total 100",ordered(a)&&weights.every(m=>m&&+m[2]>0)&&weights.reduce((sum,m)=>sum+(m?+m[2]:0),0)===100));
+   if(values.questionKind==="Pilihan ganda")checks.push(check("Pilihan A–D dan kunci",ordered(q)&&ordered(a)&&q.every(m=>["A.","B.","C.","D."].every(x=>m[2].includes(x)))&&a.every(m=>/^[A-D](?:[.)\s|])/.test(m[2]))));
  }
  return checks;
 }
