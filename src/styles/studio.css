@@ -153,19 +153,70 @@
  #studio .chat-body{font-size:14px}
 }
 
-/* Swipe navigation: no hamburger, no duplicate catalog. */
+
+/* Unified compact workspace density. Equal tracks, predictable type, no word splitting. */
+#studio{-webkit-text-size-adjust:100%;text-size-adjust:100%;font-size:15px;line-height:1.45}
+#studio .choice-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,140px),1fr));grid-auto-rows:1fr;align-items:stretch;gap:7px}
+#studio .choice{display:flex;align-items:stretch;min-width:0;margin:0}
+#studio .choice>.choice-caption{flex:1;width:100%;height:100%;min-height:50px;padding:7px 8px;font-size:13px;line-height:1.3;font-weight:550;word-break:normal;overflow-wrap:break-word;hyphens:none}
+#studio .choice input:checked+span{font-weight:750;box-shadow:inset 0 0 0 1px var(--ink)}
+#studio .ratio-grid{grid-template-columns:repeat(auto-fit,minmax(74px,1fr))}
+#studio .ratio-grid .choice>.choice-caption{min-height:48px}
+#studio .tool-info,#studio .chat-info{font-size:12px;color:var(--muted);margin-top:8px}
+#studio .tool-info summary,#studio .chat-info summary{cursor:pointer;min-height:36px;display:list-item;padding:8px 0}
+#studio .tool-info p,#studio .chat-info p{margin:6px 0 0}
+#studio .result-warning{margin:10px 0;padding:8px 10px}
+#studio .result-warning summary{min-height:36px;font-size:13px;padding:6px 0}
 #studio .mobile-bar{display:none}
-#studio .chat-info{font-size:12px;color:var(--muted);margin-top:8px}
-#studio .chat-info summary{cursor:pointer;min-height:32px;display:list-item;padding:5px 0}
-#studio .chat-info p{margin:6px 0 0}
 @media(max-width:700px){
- #studio{padding-bottom:calc(110px + env(safe-area-inset-bottom,0px))}
+ #studio{--host-bottom:32px;--nav-height:calc(54px + max(var(--host-bottom),env(safe-area-inset-bottom,0px)));padding:0 8px calc(var(--nav-height) + 12px);font-size:14px;line-height:1.4;max-width:100%}
+ #studio .top{min-height:52px;padding:8px 0;gap:6px}
+ #studio .brand{gap:6px}
+ #studio .brandmark{width:30px;height:30px}
+ #studio .brand strong{font-size:13px;line-height:1.25}
+ #studio .brand small{font-size:10px;line-height:1.25;overflow-wrap:anywhere}
  #studio .sidebar{display:none}
- #studio .mobile-bar{display:flex;flex-direction:column;position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--bg);border-top:2px solid var(--ink);padding:4px 0 calc(8px + env(safe-area-inset-bottom,0px));min-width:0}
- #studio .mobile-hint{font-size:10px;line-height:1.3;margin:0 12px 4px;color:var(--muted)}
- #studio .mobile-rail{display:flex;align-items:stretch;gap:8px;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;scroll-snap-type:x proximity;scrollbar-width:thin;padding:3px 12px 6px;min-width:0;touch-action:pan-x}
- #studio .mobile-item{flex:0 0 auto;min-width:86px;max-width:145px;min-height:48px;padding:8px 12px;font-size:12px;font-weight:650;line-height:1.25;white-space:normal;scroll-snap-align:start}
- #studio .mobile-item[aria-current=page]{background:var(--lime);color:var(--ink);box-shadow:2px 2px 0 var(--ink)}
- #studio .chat-home{min-height:max(340px,calc(100dvh - 210px));}
- #studio .chat-composer{margin-bottom:4px}
+ #studio .work{padding:12px 0}
+ #studio .workspace{scroll-margin-top:58px}
+ #studio h1{font-size:21px;line-height:1.25}
+ #studio h2{font-size:15px;line-height:1.3}
+ #studio h3{font-size:14px;line-height:1.35}
+ #studio small{font-size:11px;line-height:1.4}
+ #studio .tool-heading{margin-bottom:10px}
+ #studio .card{padding:10px;border-radius:10px;box-shadow:2px 2px 0 var(--ink)}
+ #studio .workspace-tabs{gap:6px;margin-bottom:10px;scroll-margin-top:58px}
+ #studio .workspace-tabs button{min-height:44px;font-size:12px;padding:8px}
+ #studio .param-group{margin:12px 0}
+ #studio .param-group legend{font-size:13px;line-height:1.3;margin-bottom:5px}
+ #studio .choice-grid{grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:1fr;gap:6px}
+ #studio .choice>.choice-caption{min-height:48px;padding:6px;font-size:12px;line-height:1.3;border-radius:7px}
+ #studio .ratio-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+ #studio .ratio-grid .choice>.choice-caption{min-height:44px}
+ #studio label{font-size:13px;margin:10px 0 4px}
+ #studio .choice{margin:0}
+ #studio .upload-zone{padding:8px;margin:8px 0 12px}
+ #studio .drop-zone{padding:12px 6px;gap:5px}
+ #studio .upload-symbol{width:28px;height:28px;font-size:19px}
+ #studio .source-preview img{max-height:150px;margin:6px 0}
+ #studio input:not([type=file]),#studio select,#studio textarea{font-size:14px;padding:8px;line-height:1.4}
+ #studio .actions{gap:6px;margin-top:10px}
+ #studio .actions button,#studio .output-panel button{min-height:44px;font-size:12px;padding:8px 10px}
+ #studio .status{font-size:12px;padding:7px 9px;margin:8px 0}
+ #studio .mobile-bar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--bg);border-top:1px solid var(--ink);padding:3px 0 max(var(--host-bottom),env(safe-area-inset-bottom,0px));min-width:0}
+ #studio .mobile-rail{display:flex;align-items:stretch;gap:5px;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;scroll-snap-type:x proximity;scrollbar-width:none;padding:2px 8px 4px;min-width:0;width:100%;touch-action:pan-x}
+ #studio .mobile-rail::-webkit-scrollbar{display:none}
+ #studio .mobile-item{flex:0 0 auto;min-width:0;min-height:44px;height:44px;padding:0 9px;font-size:11px;font-weight:650;line-height:1.2;white-space:nowrap;scroll-snap-align:start;border-radius:7px;border-width:1px}
+ #studio .mobile-item[aria-current=page]{background:var(--lime);color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+ #studio .chat-home{min-height:max(280px,calc(100dvh - var(--nav-height) - 90px));gap:10px}
+ #studio .chat-intro{padding:22px 2px 6px}
+ #studio .chat-logo{width:48px;height:48px}
+ #studio .chat-composer{padding:8px;margin-bottom:2px}
+ #studio .chat-composer textarea{min-height:70px}
+ #studio .chat-user,#studio .chat-assistant{padding:10px}
+ #studio .chat-body{font-size:14px}
+}
+@media(max-width:340px){
+ #studio{padding-left:6px;padding-right:6px}
+ #studio .card{padding:8px}
+ #studio .choice>.choice-caption{padding:5px;font-size:12px}
 }

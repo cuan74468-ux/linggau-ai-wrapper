@@ -2,7 +2,6 @@ import { findFeatures, getFeature, CATEGORIES } from "./core/feature-registry.js
 import { createAIClient, friendlyError } from "./core/ai-client.js";
 import { createAssetStore } from "./core/assets.js";
 import { readImage, decodeImage } from "./core/images.js";
-import {getSkill} from "./core/skills.js";
 import {assessOutput} from "./core/quality.js";
 import {createChatSession,CHAT_MAX_INPUT} from "./core/chat.js";
 
@@ -53,13 +52,13 @@ export async function mount({root,ai,version,revision=""}){
   const frame=el("div",null,"frame");sidebar.append(nav);frame.append(sidebar,work);
   const mobileBar=el("nav",null,"mobile-bar");mobileBar.setAttribute("aria-label","Navigasi alat AI di HP");
   const mobileRail=el("div",null,"mobile-rail");mobileRail.setAttribute("aria-label","Geser mendatar untuk memilih alat");
-  const mobileHint=el("small","Geser untuk alat lainnya →","mobile-hint");mobileBar.append(mobileHint,mobileRail);
+  mobileBar.append(mobileRail);
   studio.append(top,frame,mobileBar);root.replaceChildren(css,studio);
   let active=false, viewEpoch=0, current=null, slots=[], result=null, page="home";
   const tell=t=>{global.textContent=t;global.hidden=!t;};
   const compact=window.matchMedia("(max-width: 700px)");
   function setNav(){for(const b of studio.querySelectorAll(".nav button, .nav input, .mobile-bar button"))b.disabled=active;}
-  function change(fn){if(active)return;++viewEpoch;tell("");fn();renderNavigation();view.focus({preventScroll:true});view.scrollIntoView({block:"start"});}
+  function change(fn){if(active)return;++viewEpoch;tell("");fn();renderNavigation();view.focus({preventScroll:true});view.scrollIntoView({block:"start"});if(compact.matches){const selected=mobileRail.querySelector("[aria-current=page]");if(selected){const r=mobileRail.getBoundingClientRect(),s=selected.getBoundingClientRect();if(s.left<r.left||s.right>r.right)mobileRail.scrollLeft+=s.left-r.left-(r.width-s.width)/2;}}}
   const home=button("Asisten AI",()=>change(chatHome),"nav-main");
   const recent=button("Aset sesi",()=>change(history),"nav-main");
   const clear=button("Bersihkan sesi",()=>{if(active||!window.confirm("Hapus semua aset, percakapan dan input sesi?"))return;change(()=>{store.clear();conversation.clear();slots=[];result=null;current=null;chatHome();tell("Sesi dibersihkan.");});},"nav-main");
@@ -152,14 +151,11 @@ export async function mount({root,ai,version,revision=""}){
         button("Unduh TXT",()=>{try{downloadText(asset);}catch{feedback.textContent="Unduhan dibatasi browser. Gunakan Pilih semua untuk menyalin teks.";}}));
       target.append(field,actions,feedback);
     }
-    target.append(el("small","Model: "+asset.model+" · HTTP "+asset.httpStatus+" · "+asset.elapsedMs+" ms"));
-    if(asset.quality){
-      const panel=el("details",null,"quality-panel");panel.open=asset.quality.checks.some(c=>c.state==="warn");
-      panel.append(el("summary","Pemeriksaan hasil"),el("small","Pemeriksaan lokal: dimensi, rasio, struktur dan kelengkapan. Bukan verifikasi identitas visual atau fakta."));
-      for(const c of asset.quality.checks)panel.append(el("p",(c.state==="pass"?"✓ ":"! ")+c.label,c.state==="pass"?"quality-pass":"quality-warn"));
-      panel.append(el("strong","Periksa secara visual / manual"));
-      for(const item of asset.quality.review)panel.append(el("p","• "+item,"quality-review"));
-      target.append(panel);
+    const warnings=asset.quality?.checks.filter(c=>c.state==="warn")||[];
+    if(warnings.length){
+      const notice=el("details",null,"quality-panel result-warning");notice.append(el("summary","Perlu diperiksa ("+warnings.length+")"));
+      for(const c of warnings)notice.append(el("p",c.label,"quality-warn"));
+      target.append(notice);
     }
     if(asset.kind==="image"){
       const sel=el("select");sel.setAttribute("aria-label","Fitur tujuan");const placeholder=el("option","Pakai ulang ke fitur…");placeholder.value="";sel.append(placeholder);
@@ -185,7 +181,7 @@ export async function mount({root,ai,version,revision=""}){
     function showPane(pane){layout.dataset.pane=pane;editTab.setAttribute("aria-pressed",String(pane==="input"));resultTab.setAttribute("aria-pressed",String(pane==="output"));}
     showPane("input");
     form.append(el("h2",f.slots.length?"1. Foto referensi":"1. Brief & pengaturan"));
-    const guidance=el("details",null,"quality-panel");guidance.append(el("summary","Standar kualitas alat ini"));for(const item of getSkill(f.id).review)guidance.append(el("p","• "+item,"quality-review"));form.append(guidance);
+    
     const status=el("p","Siap menerima input.","status");status.setAttribute("role","status");
     const run=button("Proses AI",process,"primary"), retry=button("Coba Lagi",process);retry.hidden=true;
     function refresh(){const disabled=active||loading>0;run.disabled=disabled||slots.some(x=>!x)||f.fields.some(p=>p.required&&!String(values[p.id]||"").trim())||!client.available()[{"image-to-image":"imageToImage","text-to-image":"textToImage","text-to-text":"textToText"}[f.engine]];retry.disabled=run.disabled;inputs.forEach(x=>x.disabled=disabled);run.textContent=active?"Sedang memproses…":"Proses AI";setNav();}
@@ -213,7 +209,7 @@ export async function mount({root,ai,version,revision=""}){
         const choices=el("div",null,field.id==="ratio"?"choice-grid ratio-grid":"choice-grid");
         field.options.forEach((val,i)=>{
           const choice=el("label",null,"choice");const input=el("input");input.type="radio";input.name=id;input.value=val;input.id=id+"-"+i;input.checked=val===values[field.id];
-          const caption=el("span",val==="auto"?"Otomatis":val);
+          const caption=el("span",val==="auto"?"Otomatis":val,"choice-caption");
           if(field.id==="ratio"&&val!=="auto"){const shape=el("span",null,"ratio-shape");const [w,h]=val.split(":").map(Number);shape.style.width=String(22*w/Math.max(w,h))+"px";shape.style.height=String(22*h/Math.max(w,h))+"px";caption.prepend(shape);}
           input.addEventListener("change",()=>{if(input.checked){values[field.id]=input.value;refresh();}});
           choice.append(input,caption);choices.append(choice);inputs.push(input);
@@ -223,7 +219,7 @@ export async function mount({root,ai,version,revision=""}){
         input.addEventListener("input",()=>{values[field.id]=input.value;refresh();});inputs.push(input);form.append(label,input);
       }
     }
-    form.append(el("small","Foto dikirim ke layanan Gemini saat Anda menekan Proses AI. Hindari data sensitif; kebijakan retensi Google tetap berlaku."),el("small","Preservasi visual diupayakan, bukan penguncian piksel."),status);
+    const info=el("details",null,"tool-info");info.append(el("summary","Privasi & informasi"),el("p","Input dikirim ke Gemini saat diproses. Hindari data sensitif. Preservasi visual adalah upaya model, bukan penguncian piksel."));form.append(info,status);
     const actions=el("div",null,"actions");actions.append(run,retry);form.append(actions);output.append(el("h2","Hasil kerja"),el("p","Hasil akan muncul di sini setelah proses AI selesai.","empty result-placeholder"));layout.append(form,output);view.append(layout);refresh();
     async function process(){
       if(active||loading||slots.some(x=>!x))return;
@@ -237,7 +233,7 @@ export async function mount({root,ai,version,revision=""}){
           const compare=el("details",null,"quality-panel");compare.append(el("summary","Bandingkan foto sumber"));slots.forEach((source,i)=>{compare.append(el("small",f.slots[i]),image(source));});output.append(compare);
         }
         output.append(button("Sesuaikan & buat ulang",()=>{if(active)return;showPane("input");const notes=form.querySelector("#param-notes");if(notes){notes.scrollIntoView({block:"center"});notes.focus();}status.textContent="Sesuaikan parameter atau catatan. Tekan Proses AI untuk satu permintaan baru; hasil sebelumnya tetap di riwayat.";}));
-        status.textContent=(verified.quality.checks.some(c=>c.state==="warn")?"Hasil perlu diperiksa · ":"Selesai · ")+(res.elapsedMs/1000).toFixed(1)+" detik. Periksa kesesuaian hasil sebelum digunakan.";ready.textContent="Mesin AI · permintaan terakhir berhasil";renderNavigation();
+        status.textContent=(verified.quality.checks.some(c=>c.state==="warn")?"Perlu diperiksa · ":"Selesai · ")+(res.elapsedMs/1000).toFixed(1)+" detik";ready.textContent="Mesin AI · permintaan terakhir berhasil";renderNavigation();
       }catch(e){output.replaceChildren(el("p","Tidak ada hasil yang valid.","empty"));status.textContent=friendlyError(e);ready.textContent="Mesin AI · permintaan terakhir gagal";retry.hidden=false;}
       finally{active=false;refresh();}
     }

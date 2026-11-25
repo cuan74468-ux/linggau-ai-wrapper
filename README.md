@@ -30,3 +30,6 @@ Home is a text-only conversational assistant using the existing text bridge; one
 
 ## Mobile navigation and assistant skill refinement
 Mobile uses a fixed horizontally scrollable navigation rail containing assistant, session assets and every registered tool. Desktop retains category sidebar. Duplicate catalog page and drawer removed; tool input/result tabs retained. Assistant uses one adaptive multidisciplinary prompt with professional task methods, factuality, capability and privacy constraints; no extra model calls or actual external tools. Privacy information is available in a compact expandable note. Session/history limits remain unchanged. Real model adherence and mobile rendering require Canvas QA.
+
+## Compact mobile refinement
+Equal-height parameter grid tracks, fixed two-column mobile choices (three ratio columns), controlled typography and compact single-line 44px mobile navigation targets. A 32px bottom host clearance is reserved based on owner screenshots showing Gemini's floating control overlapping the old rail; actual host/device layout still needs verification. Remove the pre-generation quality rubric from the UI; skill contracts and local checks remain unchanged. Only structural warnings are surfaced in result details; privacy information remains available on demand. No change to engines, parameter values, storage or feature count.
