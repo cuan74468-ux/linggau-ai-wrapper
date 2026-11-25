@@ -1,4 +1,5 @@
 import {getSkill} from "./skills.js";
+import {checkText} from "./output-contracts.js";
 // Local checks only. No extra inference, network, or aesthetic score.
 export function assessOutput(feature,values,result){
  const skill=getSkill(feature.id),checks=[];
@@ -13,8 +14,7 @@ export function assessOutput(feature,values,result){
      checks.push({label:"Rasio "+ratio+(ok?" sesuai toleransi 3%":" tidak sesuai; hasil tidak dipotong otomatis"),state:ok?"pass":"warn"});
    }
  }else{
-   const normalized=String(result.text||"").toLocaleUpperCase("id");
-   for(const heading of skill.headings)checks.push({label:"Bagian "+heading,state:normalized.includes(heading)?"pass":"warn"});
+   checks.push(...checkText(feature.id,values,result.text));
  }
  return Object.freeze({checks:Object.freeze(checks.map(Object.freeze)),review:skill.review});
 }

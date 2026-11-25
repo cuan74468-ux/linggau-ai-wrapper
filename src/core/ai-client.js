@@ -15,6 +15,7 @@ export function createAIClient(bridge) {
     const sizes=images.map(imageBytes);
     if(sizes.some(s=>s>MAX_IMAGE)||sizes.reduce((a,b)=>a+b,0)>MAX_TOTAL) throw new Error("IMAGE_LIMIT");
     const prompt=buildPrompt(feature,normalized);
+    if(prompt.length>12000)throw new Error("PROMPT_LIMIT");
     const aspectRatio=RATIOS.includes(normalized.ratio)&&normalized.ratio!=="auto"?normalized.ratio:undefined;
     const req={prompt,images:images.map(({mimeType,base64})=>({mimeType,base64})),aspectRatio};
     const methods={"image-to-image":"editImage","text-to-image":"generateImage","text-to-text":"generateText"};
@@ -42,6 +43,7 @@ export function friendlyError(error){
   if(m.includes("IMAGE_LIMIT")) return "Ukuran gambar melebihi batas 8 MB per foto atau 12 MB total.";
   if(m.includes("AI_BRIDGE_NOT_CONNECTED")) return "AI Bridge tidak tersedia pada shell ini.";
   if(m.includes("AI_NO_VALID")||m.includes("AI_OUTPUT_INVALID")) return "AI tidak mengembalikan hasil yang valid.";
+  if(m.includes("PROMPT_LIMIT")) return "Brief terlalu panjang. Ringkas masukan sebelum menjalankan AI.";
   if(m.includes("AI_BUSY")) return "Satu permintaan masih berjalan.";
   return "Gagal: "+m.slice(0,180);
 }

@@ -1,0 +1,25 @@
+# P0 acceptance ledger — 25 November 2026
+Baseline: 5d9ca03. This is a test plan, not fabricated evidence. Repeat affected workflows against the promoted candidate. Record revision, account/device (not email), input type, selected parameters, actual result and PASS/WARN/FAIL. Avoid sensitive images.
+
+| Tool | Real acceptance case | Status before current promotion |
+|---|---|---|
+| Product photo | Labeled package, intact text and geometry, beige background | OPEN |
+| Food photo | Bakso, identical bowl, portion, ingredients, natural light | OPEN |
+| AI model | Single adult, full-body natural hands, shoes, margins | Historical engine PASS; quality retest |
+| Virtual try-on | Reuse model; garment-only reference, no pasted head, natural seams | Historical HTTP PASS / visual FAIL; retest |
+| Background | Monochrome portrait, new background, foreground remains monochrome | Historical engine PASS; retest |
+| Sharpen | Low-detail original; no invented text or face | OPEN |
+| Poster | Exact headline, CTA, aspect, legibility | OPEN |
+| SEO caption | Supplied product facts only, one caption, five keywords | Historical engine & clipboard PASS; retest new contract |
+| Formal photo | Preserve clothing, facial details, original crop | OPEN |
+| Product mockup | Label and shape unchanged, realistic contact shadow | OPEN |
+| Restore | Old monochrome image, no fabricated detail | OPEN |
+| Logo | Exact spelling, simple readable raster concept | OPEN |
+| Thumbnail | Exact headline, 16:9, legible on phone | OPEN |
+| TikTok ideas | One actionable concept, four nonempty sections | OPEN |
+| Ad script | One 15-second script, contiguous timing | OPEN |
+| Calendar | Seven sequential days with complete fields | OPEN |
+
+Cross-cutting gates: same Canvas link shows promoted SHA without shell edits; mobile 360px no horizontal overflow, nav and form usable; image download and text copy; asset reuse model -> try-on without reupload; cross-account actual candidate; 401/403/429 fail closed with no automatic retry; user consent/privacy and applicable provider terms/quota confirmed before commercial release.
+
+One generate = one result object, not alternative drafts; a calendar or keyword list is one deliverable with multiple components. Local structure checks warn on empty/missing/repeated/out-of-order sections, keyword count, ad timing and calendar day count. They do not verify factual truth, identity or design quality. Warn results remain accessible for review, never labelled fully validated. No automatic re-generation. CI mocks are not runtime evidence.

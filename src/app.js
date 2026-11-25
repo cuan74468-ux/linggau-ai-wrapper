@@ -121,7 +121,7 @@ export async function mount({root,ai,version,revision=""}){
     target.append(el("small","Model: "+asset.model+" · HTTP "+asset.httpStatus+" · "+asset.elapsedMs+" ms"));
     if(asset.quality){
       const panel=el("details",null,"quality-panel");panel.open=asset.quality.checks.some(c=>c.state==="warn");
-      panel.append(el("summary","Pemeriksaan hasil"),el("small","Pemeriksaan lokal: dimensi, rasio atau keberadaan judul bagian. Bukan jaminan kualitas AI."));
+      panel.append(el("summary","Pemeriksaan hasil"),el("small","Pemeriksaan lokal: dimensi, rasio, struktur dan kelengkapan. Bukan verifikasi identitas visual atau fakta."));
       for(const c of asset.quality.checks)panel.append(el("p",(c.state==="pass"?"✓ ":"! ")+c.label,c.state==="pass"?"quality-pass":"quality-warn"));
       panel.append(el("strong","Periksa secara visual / manual"));
       for(const item of asset.quality.review)panel.append(el("p","• "+item,"quality-review"));
@@ -197,7 +197,7 @@ export async function mount({root,ai,version,revision=""}){
           const compare=el("details",null,"quality-panel");compare.append(el("summary","Bandingkan foto sumber"));slots.forEach((source,i)=>{compare.append(el("small",f.slots[i]),image(source));});output.append(compare);
         }
         output.append(button("Sesuaikan & buat ulang",()=>{if(active)return;const notes=form.querySelector("#param-notes");if(notes){notes.scrollIntoView({block:"center"});notes.focus();}status.textContent="Sesuaikan parameter atau catatan. Tekan Proses AI untuk satu permintaan baru; hasil sebelumnya tetap di riwayat.";}));
-        status.textContent="Selesai · "+(res.elapsedMs/1000).toFixed(1)+" detik. Periksa kesesuaian hasil sebelum digunakan.";ready.textContent="Mesin AI · permintaan terakhir berhasil";renderNavigation();
+        status.textContent=(verified.quality.checks.some(c=>c.state==="warn")?"Hasil perlu diperiksa · ":"Selesai · ")+(res.elapsedMs/1000).toFixed(1)+" detik. Periksa kesesuaian hasil sebelum digunakan.";ready.textContent="Mesin AI · permintaan terakhir berhasil";renderNavigation();
       }catch(e){output.replaceChildren(el("p","Tidak ada hasil yang valid.","empty"));status.textContent=friendlyError(e);ready.textContent="Mesin AI · permintaan terakhir gagal";retry.hidden=false;}
       finally{active=false;refresh();}
     }
