@@ -44,36 +44,41 @@ export async function mount({root,ai,version,revision=""}){
   const mark=el("img",null,"brandmark");mark.alt="";mark.src=new URL("./assets/linggau-mark.svg",import.meta.url).href;brand.append(mark);
   const identity=el("div");identity.append(el("strong","Linggau AI Studio"),el("small","Workspace kreatif · v"+version+(revision?" · "+revision.slice(0,7):"")));brand.append(identity);
   const ready=el("small",client.available().imageToImage?"Mesin AI tersedia · akses diuji saat proses":"Mesin AI tidak terhubung","bridge-status");
-  const toggle=button("☰",()=>setDrawer(!drawerOpen),"menu-toggle");toggle.setAttribute("aria-label","Buka menu alat AI");toggle.setAttribute("aria-controls","studio-sidebar");toggle.setAttribute("aria-expanded","false");
-  top.append(brand,ready,toggle);
+  top.append(brand,ready);
   const sidebar=el("aside",null,"sidebar");sidebar.id="studio-sidebar";
   const nav=el("nav",null,"nav");nav.setAttribute("aria-label","Seluruh alat AI");
   const view=el("div",null,"workspace");view.id="studio-workspace";view.setAttribute("role","region");view.setAttribute("aria-label","Area kerja");view.tabIndex=-1;
   const global=el("p",null,"status");global.setAttribute("role","status");global.hidden=true;
   const work=el("div",null,"work");work.append(global,view);
-  const frame=el("div",null,"frame");const drawerClose=button("Tutup menu ×",()=>setDrawer(false),"drawer-close");const backdrop=button("",()=>setDrawer(false),"drawer-backdrop");backdrop.setAttribute("aria-label","Tutup menu");backdrop.tabIndex=-1;sidebar.append(drawerClose,nav);frame.append(sidebar,work,backdrop);
-  studio.append(top,frame);root.replaceChildren(css,studio);
-  let active=false, viewEpoch=0, current=null, slots=[], query="", category="all", result=null, drawerOpen=false, page="home";
+  const frame=el("div",null,"frame");sidebar.append(nav);frame.append(sidebar,work);
+  const mobileBar=el("nav",null,"mobile-bar");mobileBar.setAttribute("aria-label","Navigasi alat AI di HP");
+  const mobileRail=el("div",null,"mobile-rail");mobileRail.setAttribute("aria-label","Geser mendatar untuk memilih alat");
+  const mobileHint=el("small","Geser untuk alat lainnya →","mobile-hint");mobileBar.append(mobileHint,mobileRail);
+  studio.append(top,frame,mobileBar);root.replaceChildren(css,studio);
+  let active=false, viewEpoch=0, current=null, slots=[], result=null, page="home";
   const tell=t=>{global.textContent=t;global.hidden=!t;};
   const compact=window.matchMedia("(max-width: 700px)");
-  function setDrawer(open){drawerOpen=!!open&&compact.matches;studio.classList.toggle("drawer-open",drawerOpen);toggle.setAttribute("aria-expanded",String(drawerOpen));work.inert=drawerOpen;top.inert=drawerOpen;if(drawerOpen){sidebar.setAttribute("role","dialog");sidebar.setAttribute("aria-modal","true");sidebar.setAttribute("aria-label","Menu alat AI");drawerClose.focus();}else{sidebar.removeAttribute("role");sidebar.removeAttribute("aria-modal");sidebar.removeAttribute("aria-label");if(compact.matches&&sidebar.contains(document.activeElement))toggle.focus();}}
-  compact.addEventListener?.("change",()=>setDrawer(false));
-  studio.addEventListener("keydown",e=>{if(e.key==="Escape"&&drawerOpen){setDrawer(false);toggle.focus();}if(drawerOpen&&e.key==="Tab"){const items=[...sidebar.querySelectorAll("button:not(:disabled),input:not(:disabled),summary")].filter(n=>n.getClientRects().length);if(!items.length)return;const first=items[0],last=items.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}});
-  function setNav(){for(const b of nav.querySelectorAll("button, input"))b.disabled=active;}
-  function change(fn){if(active)return;++viewEpoch;tell("");setDrawer(false);fn();renderNavigation();view.focus({preventScroll:true});view.scrollIntoView({block:"start"});}
+  function setNav(){for(const b of studio.querySelectorAll(".nav button, .nav input, .mobile-bar button"))b.disabled=active;}
+  function change(fn){if(active)return;++viewEpoch;tell("");fn();renderNavigation();view.focus({preventScroll:true});view.scrollIntoView({block:"start"});}
   const home=button("Asisten AI",()=>change(chatHome),"nav-main");
-  const allTools=button("Semua alat",()=>change(catalog),"nav-main");
   const recent=button("Aset sesi",()=>change(history),"nav-main");
   const clear=button("Bersihkan sesi",()=>{if(active||!window.confirm("Hapus semua aset, percakapan dan input sesi?"))return;change(()=>{store.clear();conversation.clear();slots=[];result=null;current=null;chatHome();tell("Sesi dibersihkan.");});},"nav-main");
   const sideSearch=el("input");sideSearch.type="search";sideSearch.placeholder="Cari alat AI…";sideSearch.setAttribute("aria-label","Cari alat di sidebar");
   const groups=el("div",null,"nav-groups");
   const opened=new Set([CATEGORIES[0]]);
-  nav.append(home,allTools,recent,sideSearch,groups,clear);
+  nav.append(home,recent,sideSearch,groups,clear);
+  const mobileButtons=new Map();
+  const shortNames={"product-photo":"Foto produk","food-photo":"Foto makanan","ai-model":"Model AI","virtual-try-on":"Try-On","formal-photo":"Foto formal","product-mockup":"Mockup","background":"Background","sharpen":"Pertajam","restore":"Restorasi","poster":"Poster & banner","logo":"Logo","thumbnail":"Thumbnail","seo-caption":"SEO & caption","tiktok-ideas":"Ide TikTok","ad-script":"Naskah iklan","content-calendar":"Kalender"};
+  function mobileItem(id,label,full,action){const b=button(label,()=>change(action),"mobile-item");b.setAttribute("aria-label",full);b.title=full;mobileButtons.set(id,b);mobileRail.append(b);}
+  mobileItem("home","Asisten AI","Asisten AI",chatHome);mobileItem("history","Aset sesi","Aset sesi",history);
+  for(const cat of CATEGORIES)for(const f of findFeatures("",cat))mobileItem(f.id,shortNames[f.id]||f.title,f.title,()=>workspace(f));
   sideSearch.addEventListener("input",renderNavigation);
   function renderNavigation(){
     home.setAttribute("aria-current",page==="home"?"page":"false");
     recent.setAttribute("aria-current",page==="history"?"page":"false");
-    recent.textContent="Aset sesi ("+store.list().length+")";allTools.setAttribute("aria-current",page==="catalog"?"page":"false");
+    recent.textContent="Aset sesi ("+store.list().length+")";
+    for(const [id,b] of mobileButtons)b.setAttribute("aria-current",id===(page==="tool"?current?.id:page)?"page":"false");
+    mobileButtons.get("history").textContent="Aset ("+store.list().length+")";
     groups.replaceChildren();
     const matches=findFeatures(sideSearch.value);
     for(const cat of CATEGORIES){
@@ -87,16 +92,6 @@ export async function mount({root,ai,version,revision=""}){
     if(!matches.length)groups.append(el("p","Alat tidak ditemukan.","empty"));
     setNav();
   }
-  function catalog(){
-    page="catalog";current=null;slots=[];result=null;view.replaceChildren(el("h1","Semua alat"),el("p","Pilih alat khusus sesuai pekerjaan Anda."));
-    const search=el("input");search.type="search";search.placeholder="Cari fitur...";search.value=query;search.setAttribute("aria-label","Cari fitur");
-    const filter=el("select");filter.setAttribute("aria-label","Kategori");
-    for(const c of ["all",...CATEGORIES]){const option=el("option",c==="all"?"Semua kategori":c);option.value=c;filter.append(option);}filter.value=category;
-    const controls=el("div",null,"grid");controls.append(search,filter);view.append(controls);
-    const grid=el("div",null,"grid");grid.style.marginTop="16px";view.append(grid);
-    function render(){grid.replaceChildren();const list=findFeatures(query,category);if(!list.length)grid.append(el("p","Tidak ada fitur yang cocok.","empty"));for(const f of list){const b=button("",()=>change(()=>workspace(f)),"tool");b.append(el("small",f.category),el("strong",f.title),el("small",f.description),el("small",({"image-to-image":"Edit foto","text-to-image":"Buat gambar","text-to-text":"Buat teks"})[f.engine],"engine-label"));grid.append(b);}}
-    search.addEventListener("input",()=>{query=search.value;render();});filter.addEventListener("change",()=>{category=filter.value;render();});render();
-  }
   function chatHome(){
     page="home";current=null;slots=[];result=null;
     const panel=el("section",null,"chat-home"), intro=el("div",null,"chat-intro");
@@ -108,7 +103,8 @@ export async function mount({root,ai,version,revision=""}){
     const status=el("p",null,"chat-status");status.setAttribute("role","status");
     const send=el("button","Kirim ↑","primary");send.type="submit";
     const foot=el("div",null,"chat-compose-actions");foot.append(el("small","Enter untuk baris baru"),send);
-    form.append(field,foot,status,el("small","Chat sementara · konteks terbatas · tanpa browsing atau akses Gmail/Drive. Jangan kirim data sensitif."));
+    const info=el("details",null,"chat-info");info.append(el("summary","Tentang asisten & privasi"),el("p","Percakapan tersimpan sementara di halaman ini, bukan di akun Gmail. Asisten memakai konteks terbaru yang muat dalam batas prompt; percakapan lama dapat tidak ikut terkirim. Tidak memiliki akses langsung ke web, Gmail, Drive atau tindakan eksternal. Pesan dikirim ke Gemini saat Anda menekan Kirim. Hindari informasi sensitif."));
+    form.append(field,foot,status,info);
     panel.append(bar,intro,messages,form);view.replaceChildren(panel);
     function draw(){
       const turns=conversation.list();intro.hidden=turns.length>0;messages.replaceChildren();
@@ -127,7 +123,7 @@ export async function mount({root,ai,version,revision=""}){
       const input=field.value.trim();active=true;status.textContent="Mengirim satu permintaan…";refreshChat();
       try{const res=await client.chat(conversation.prompt(input));conversation.append(input,res.text);field.value="";draw();status.textContent="";ready.textContent="Mesin AI · permintaan terakhir berhasil";}
       catch(e){status.textContent=friendlyError(e);ready.textContent="Mesin AI · permintaan terakhir gagal";}
-      finally{active=false;refreshChat();field.focus();}
+      finally{active=false;refreshChat();if(!compact.matches)field.focus();}
     });
     draw();refreshChat();
   }
@@ -173,6 +169,7 @@ export async function mount({root,ai,version,revision=""}){
   }
   function history(){
     page="history";current=null;slots=[];result=null;view.replaceChildren(el("h1","Aset sesi"),el("p","Pakai kembali foto hasil AI pada alat lain atau unduh. Maksimal 10 aset; hilang saat halaman dimuat ulang. Tidak disimpan ke Gmail atau database."));
+    const erase=button("Bersihkan sesi",()=>clear.click());view.append(erase);
     const grid=el("div",null,"grid");view.append(grid);
     for(const a of store.list()){const c=el("article",null,"card");resultCard(a,c);c.append(el("small","Asal aset: "+(a.parents.join(", ")||"input baru")),button("Hapus hasil",()=>change(()=>{store.remove(a.id);history();})));grid.append(c);}
     if(!store.list().length)grid.append(el("p","Belum ada hasil.","empty"));
