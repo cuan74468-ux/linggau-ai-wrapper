@@ -52,7 +52,7 @@ export async function composeCutout(prepared,plan,generated=null){
    const background=b.ctx.getImageData(0,0,w,h);final=compositePixels(source.data,background.data,mask,w,h);b.c.width=b.c.height=1;
  }
  // Preserve original decoded pixels for an independent PNG round-trip check.
- const data=ctx.createImageData(w,h);data.data.set(final.pixels);ctx.putImageData(data,0,0);
+ ctx.putImageData(new ImageData(final.pixels,w,h),0,0);
  const result=await encode(c,{model:generated?.model||"Local background compositor",...(generated?{httpStatus:generated.httpStatus}:{}),elapsedMs:(generated?.elapsedMs||0)+Math.round(performance.now()-start),processing:"precision",protectedPixels:final.protectedPixels});
  const png=await decoded(result);
  if(png.naturalWidth!==w||png.naturalHeight!==h)throw Error("PIXEL_VERIFY_FAILED");

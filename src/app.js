@@ -193,7 +193,7 @@ export async function mount({root,ai,version,revision=""}){
       const disabled=active||loading>0;
       let available=client.available()[{"image-to-image":"imageToImage","text-to-image":"textToImage","text-to-text":"textToText"}[f.engine]];
       if(localSharpen)available=true;
-      if(precision){try{const plan=backdropPlan({...values,transparent});available=!!maskImage&&(useAlpha&&alphaAvailable||validPolygon(points))&&(!!plan.color||!!plan.transparent||client.available().textToImage);}catch{available=false;}}
+      if(precision){try{const plan=backdropPlan({...values,transparent});available=!!maskImage&&(useAlpha?alphaAvailable:validPolygon(points))&&(!!plan.color||!!plan.transparent||client.available().textToImage);}catch{available=false;}}
       form.classList.toggle("precision-active",precision);
       run.disabled=disabled||slots.some(x=>!x)||f.fields.some(p=>p.required&&(!precision||(!transparent&&p.id==="sceneBrief"))&&!String(values[p.id]||"").trim())||!available;retry.disabled=run.disabled;
       inputs.forEach(x=>x.disabled=disabled);maskControls.forEach(x=>x.disabled=disabled);
@@ -228,18 +228,18 @@ export async function mount({root,ai,version,revision=""}){
       const alphaToggle=button("Pakai transparansi foto",()=>{if(active||!alphaAvailable)return;useAlpha=true;points=[];update();});alphaToggle.hidden=true;
       const manualToggle=button("Tandai manual",()=>{if(active)return;useAlpha=false;points=[];update();});manualToggle.hidden=true;
       const trace=button("Gambar garis",()=>{if(active)return;drawMode=!drawMode;canvas.style.touchAction=drawMode?"none":"manipulation";trace.textContent=drawMode?"Mode garis aktif":"Gambar garis";trace.setAttribute("aria-pressed",String(drawMode));});trace.setAttribute("aria-pressed","false");
-      const update=()=>{count.textContent=useAlpha?"Transparansi foto aktif":points.length+" titik · "+(validPolygon(points)?"siap diproses":"minimal 3 titik");alphaToggle.hidden=!alphaAvailable||useAlpha;manualToggle.hidden=!useAlpha;trace.hidden=useAlpha;drawMask();refresh();};
-      img.onload=()=>{if(maskSource!==source||maskCanvas!==canvas)return;const s=Math.min(1,600/Math.max(img.naturalWidth,img.naturalHeight));canvas.width=Math.max(1,Math.round(img.naturalWidth*s));canvas.height=Math.max(1,Math.round(img.naturalHeight*s));maskImage=img;const context=canvas.getContext("2d");if(context){context.drawImage(img,0,0,canvas.width,canvas.height);try{const d=context.getImageData(0,0,canvas.width,canvas.height).data;let clear=false,opaque=false;for(let i=3;i<d.length;i+=4){if(d[i]===0)clear=true;if(d[i]===255)opaque=true;}alphaAvailable=clear&&opaque;useAlpha=alphaAvailable;}catch{alphaAvailable=false;}}update();};
+      const update=()=>{count.textContent=useAlpha?"Transparansi foto aktif":points.length+" titik · "+(validPolygon(points)?"siap diproses":"minimal 3 titik");alphaToggle.hidden=!alphaAvailable||useAlpha;manualToggle.hidden=!useAlpha;trace.hidden=useAlpha;undo.hidden=useAlpha;reset.hidden=useAlpha;drawMask();refresh();};
+      img.onload=()=>{if(epoch!==viewEpoch||maskSource!==source||maskCanvas!==canvas)return;const s=Math.min(1,600/Math.max(img.naturalWidth,img.naturalHeight));canvas.width=Math.max(1,Math.round(img.naturalWidth*s));canvas.height=Math.max(1,Math.round(img.naturalHeight*s));maskImage=img;const context=canvas.getContext("2d");if(context){context.drawImage(img,0,0,canvas.width,canvas.height);try{const d=context.getImageData(0,0,canvas.width,canvas.height).data;let clear=false,opaque=false;for(let i=3;i<d.length;i+=4){if(d[i]===0)clear=true;if(d[i]===255)opaque=true;}alphaAvailable=clear&&opaque;useAlpha=alphaAvailable;}catch{alphaAvailable=false;}}update();};
       img.onerror=()=>{if(maskSource===source)count.textContent="Foto tidak dapat dibuka.";};
       img.src="data:"+source.mimeType+";base64,"+source.base64;
       function position(e){const r=canvas.getBoundingClientRect();if(!canvas.clientWidth||!canvas.clientHeight)return null;return [Math.max(0,Math.min(1,(e.clientX-r.left-canvas.clientLeft)/canvas.clientWidth)),Math.max(0,Math.min(1,(e.clientY-r.top-canvas.clientTop)/canvas.clientHeight))];}
-      function addPoint(e){if(active||loading||useAlpha||!maskImage||points.length>=300)return;const p=position(e);if(!p)return;const last=points.at(-1);if(last&&Math.hypot(p[0]-last[0],p[1]-last[1])<.004)return;points.push(p);update();}
+      function addPoint(e){if(active||loading||useAlpha||!maskImage||points.length>=300)return;const p=position(e);if(!p)return;const last=points.at(-1);if(last&&Math.hypot(p[0]-last[0],p[1]-last[1])<.004)return;points.push(p);if(!drawing)update();else drawMask();}
       let drawing=false;
       canvas.addEventListener("click",e=>{if(!drawMode)addPoint(e);});
       canvas.addEventListener("pointerdown",e=>{if(!drawMode||active||useAlpha)return;e.preventDefault();points=[];drawing=true;canvas.setPointerCapture?.(e.pointerId);addPoint(e);});
       canvas.addEventListener("pointermove",e=>{if(drawing&&drawMode)addPoint(e);});
       canvas.addEventListener("pointerup",()=>{drawing=false;update();});
-      canvas.addEventListener("pointercancel",()=>{drawing=false;update();});
+      canvas.addEventListener("pointercancel",()=>{if(drawing)points=[];drawing=false;update();});
       const undo=button("Urungkan titik",()=>{if(active)return;useAlpha=false;points.pop();update();}),reset=button("Ulangi tanda",()=>{if(active)return;useAlpha=false;points=[];update();});
       maskControls=[undo,reset,trace,alphaToggle,manualToggle];const actions=el("div",null,"actions");actions.append(undo,reset,trace,alphaToggle,manualToggle);
       maskArea.append(el("small","Ketuk titik atau aktifkan Gambar garis, lalu ikuti keliling objek. Area hijau dipertahankan. Foto transparan dapat memakai alpha asli."),canvas,count,actions);
