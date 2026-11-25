@@ -1,9 +1,11 @@
+import {PHOTO_SKILLS} from "../features/photo-expansion.js";
 import {PROFESSION_SKILLS} from "../features/professions.js";
 // Feature-specific professional craft, boundaries and acceptance criteria.
 // These are prompt-level instructions, not a claim of independent visual verification.
 const skill=(role,craft,review,headings=[])=>Object.freeze({role,craft,review:Object.freeze(review),headings:Object.freeze(headings)});
 export const SKILLS=Object.freeze({
  ...PROFESSION_SKILLS,
+ ...PHOTO_SKILLS,
  "product-photo":skill("Commercial product photographer","Build a credible set around the intact SKU. Use physically plausible contact shadows, reflections, material response and camera perspective. Keep logo orientation and legibility. Make the product the hero; do not create a different packaging variant. If the requested viewpoint would reveal unseen geometry, keep the source viewpoint.",["Bentuk, jumlah dan ukuran relatif produk tetap","Label, logo, warna dan motif sama","Bayangan, properti dan latar masuk akal"]),
  "food-photo":skill("Culinary editorial photographer","Show appetizing but truthful texture, natural highlights, real portion size and authentic ingredients. Keep bowl/plate geometry and composition where protected. Avoid fabricated steam, garnish, extra ingredients, artificial gloss or oversaturation. Arrange only the surrounding scene.",["Porsi, bahan dan wadah tidak berubah","Tekstur dan warna makanan natural","Latar dan cahaya sesuai pilihan"]),
  "ai-model":skill("Fashion casting and portrait photographer","Create a single fictional adult with coherent skeletal proportions, natural neck and shoulder attachment, hands with plausible anatomy, balanced stance and believable skin texture. Use the chosen garment, crop and pose. Full-body framing must include shoes and head with margins; crop choices override pose wording. No extra person or mirrored duplicate.",["Anatomi, tangan dan proporsi wajar","Usia, pakaian, pose dan crop sesuai","Latar bersih dan layak jadi aset fashion"]),

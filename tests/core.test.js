@@ -6,7 +6,7 @@ import {buildPrompt,UNIVERSAL_LOCK} from "../src/core/universal-lock.js";
 import {createAIClient,friendlyError,imageBytes} from "../src/core/ai-client.js";
 import {createAssetStore} from "../src/core/assets.js";
 const img={mimeType:"image/png",base64:"AAAA"};
-test("27 unique tools, seven categories and three engines",()=>{const f=validateRegistry();assert.equal(f.length,27);assert.equal(CATEGORIES.length,7);assert.equal(new Set(f.map(x=>x.engine)).size,3);});
+test("40 unique tools, seven categories and three engines",()=>{const f=validateRegistry();assert.equal(f.length,40);assert.equal(CATEGORIES.length,7);assert.equal(new Set(f.map(x=>x.engine)).size,3);});
 test("search and category",()=>{assert.equal(findFeatures("makanan").length,1);assert.equal(findFeatures("",CATEGORIES[1]).length,3);assert.equal(findFeatures("nonsense").length,0);});
 test("try on has distinct ordered slots",()=>assert.deepEqual(getFeature("virtual-try-on").slots,["Foto model dewasa","Foto pakaian"]));
 test("parameter defaults and allowlist",()=>{const f=getFeature("product-photo");assert.equal(normalize(f).background,"Studio beige");assert.throws(()=>normalize(f,{ratio:"evil"}));});

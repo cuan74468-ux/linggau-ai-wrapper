@@ -1,3 +1,4 @@
+import {PHOTO_FEATURES} from "./photo-expansion.js";
 import { OPTIONS, select, text, ratio } from "../core/parameters.js";
 import { EXTRA_FEATURES } from "./batch-02.js";
 import {PROFESSION_CATEGORIES,PROFESSION_FEATURES} from "./professions.js";
@@ -20,5 +21,6 @@ export const FEATURES = Object.freeze([
   {id:"seo-caption",title:"Deskripsi Produk SEO & Caption",category:business,engine:"text-to-text",slots:[],description:"Copy siap salin berdasarkan fakta produk.",fields:[text("product","Nama produk dan fakta",true),text("audience","Target pembeli",true,500),select("tone","Nada bahasa",["Natural","Profesional","Persuasif ringan"]),text("keywords","Kata kunci (opsional)",false,300),select("platform","Platform",["Marketplace","Instagram","TikTok","WhatsApp","Website"]),select("goal","Tujuan",["Informasi produk","Penjualan","Edukasi"]),notes()],recipe:"Write useful marketing copy based only on provided facts. Output headings: JUDUL PRODUK, DESKRIPSI SEO, 5 KATA KUNCI SUGESTI, CAPTION, CTA. Suggested keywords are not verified search-volume data."}
 ,
   ...EXTRA_FEATURES,
-  ...PROFESSION_FEATURES
+  ...PROFESSION_FEATURES,
+  ...PHOTO_FEATURES
 ]);
