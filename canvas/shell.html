@@ -11,7 +11,8 @@
 <script>
 const apiKey = "";
 const CDN = "https://cdn.jsdelivr.net/gh/cuan74468-ux/linggau-ai-wrapper";
-const PREVIEW_REF = ""; // For candidate QA only: set to the reviewed commit SHA.
+const PREVIEW_REF = ""; // Optional immutable SHA override for debugging.
+const UPDATE_CHANNEL = "preview"; // preview or stable; change only during initial migration.
 const IMAGE_MODEL = "gemini-3.1-flash-image";
 const TEXT_MODEL = "gemini-3-flash-preview";
 const TYPES = ["image/jpeg","image/png","image/webp"];
@@ -85,7 +86,11 @@ function validateManifest(m) {
 }
 
 /* BOOTSTRAP */
-const KNOWN_GOOD_PREVIEW = "2e08c059376c29343a05a66462848925184849ef";
+const KNOWN_GOOD_PREVIEW = "1340f044b4f16355b70829fca267d920eb38618d";
+function validateChannel(m){
+  if(!m||m.shellApi!==2||m.entry!=="src/app.js"||typeof m.commit!=="string"||!/^[0-9a-f]{40}$/.test(m.commit)||typeof m.version!=="string"||!/^0\.\d+\.\d+$/.test(m.version))throw Error("CHANNEL_MANIFEST_INVALID");
+  return m;
+}
 function deadline(promise, ms, code) {
   let timer;
   return Promise.race([promise,new Promise((_,reject)=>{
@@ -99,31 +104,34 @@ async function bootstrap(ref=PREVIEW_REF){
   const screen=document.createElement("section");screen.className="boot";
   const title=document.createElement("h1");title.textContent="Linggau AI Studio";
   const message=document.createElement("p");message.setAttribute("role","status");
-  const detail=document.createElement("small");detail.textContent=ref?"Preview "+ref.slice(0,12):"Rilis aktif";
+  const detail=document.createElement("small");detail.textContent=ref?"Preview "+ref.slice(0,12):"Kanal "+UPDATE_CHANNEL;
   screen.append(title,message,detail);root.replaceChildren(screen);
   function progress(next,text){stage=next;message.textContent=text;}
   try{
-    if(apiKey!==""||ref&&!/^[0-9a-f]{40}$/.test(ref))throw Error("SHELL_CONFIG_INVALID");
+    if(apiKey!==""||ref&&!/^[0-9a-f]{40}$/.test(ref)||!["preview","stable"].includes(UPDATE_CHANNEL))throw Error("SHELL_CONFIG_INVALID");
     progress("MANIFEST","Memeriksa manifest versi…");
     const controller=new AbortController(), timer=setTimeout(()=>controller.abort(),15000);
     let manifest;
     try{
       manifest=await deadline((async()=>{
-        const res=await fetch(CDN+"@"+(ref||"main")+"/manifest.json",{cache:"no-store",credentials:"omit",redirect:"error",signal:controller.signal});
+        const channel=!ref&&UPDATE_CHANNEL==="preview";
+        const path=channel?"@preview-channel/channel.json":"@"+(ref||"main")+"/manifest.json";
+        const res=await fetch(CDN+path,{cache:"no-store",credentials:"omit",redirect:"error",signal:controller.signal});
         if(!res.ok)throw Error("MANIFEST_HTTP_"+res.status);
-        return validateManifest(await res.json());
+        return channel?validateChannel(await res.json()):validateManifest(await res.json());
       })(),15000,"MANIFEST_TIMEOUT_15S");
     }finally{clearTimeout(timer);controller.abort();}
     progress("MODULE","Memuat modul dan dependensi CDN…");
-    const url=CDN+"@"+(ref||manifest.release)+"/"+manifest.entry;
+    const selected=ref||manifest.commit||manifest.release;
+    const url=CDN+"@"+selected+"/"+manifest.entry;
     const app=await deadline(import(url),20000,"MODULE_TIMEOUT_20S");
     if(typeof app.mount!=="function")throw Error("MOUNT_MISSING");
     progress("MOUNT","Menyiapkan antarmuka…");
     const bridge=manifest.shellApi===1?Object.freeze({available:false,async editImage(){throw Error("AI_BRIDGE_NOT_CONNECTED");}}):aiBridge;
     // Mount in a detached staging root: a timed-out mount cannot overwrite the error or fallback screen.
     const staging=document.createElement("div");
-    await deadline(Promise.resolve().then(()=>app.mount({root:staging,ai:bridge,version:manifest.version})),10000,"MOUNT_TIMEOUT_10S");
-    root.replaceChildren(...staging.childNodes);
+    await deadline(Promise.resolve().then(()=>app.mount({root:staging,ai:bridge,version:manifest.version,revision:selected})),10000,"MOUNT_TIMEOUT_10S");
+    root.replaceChildren(staging);
     root.setAttribute("aria-busy","false");
     console.info("APP_BOOT_OK",manifest.version,ref?"PREVIEW":"STABLE");
   }catch(e){
@@ -133,7 +141,7 @@ async function bootstrap(ref=PREVIEW_REF){
     message.setAttribute("role","alert");
     const retry=document.createElement("button");retry.textContent="Coba lagi";retry.onclick=()=>location.reload();
     screen.append(document.createElement("br"),retry);
-    if(ref&&ref!==KNOWN_GOOD_PREVIEW){
+    if((ref||UPDATE_CHANNEL==="preview")&&ref!==KNOWN_GOOD_PREVIEW){
       const fallback=document.createElement("button");fallback.textContent="Buka workspace sebelumnya";fallback.onclick=()=>bootstrap(KNOWN_GOOD_PREVIEW);screen.append(fallback);
     }
     root.replaceChildren(screen);

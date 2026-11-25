@@ -31,7 +31,7 @@ function downloadText(asset){
   document.body.append(a);a.click();a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),30000);
 }
-export async function mount({root,ai,version}){
+export async function mount({root,ai,version,revision=""}){
   if(!(root instanceof HTMLElement))throw new Error("APP_ROOT_INVALID");
   const client=createAIClient(ai), store=createAssetStore();
   const css=el("link");css.rel="stylesheet";css.href=new URL("./styles/studio.css",import.meta.url).href;
@@ -39,7 +39,7 @@ export async function mount({root,ai,version}){
   const top=el("header",null,"top");
   const brand=el("div",null,"brand");
   brand.append(el("span","L","brandmark"));
-  const identity=el("div");identity.append(el("strong","Linggau AI Studio"),el("small","Workspace kreatif · v"+version));brand.append(identity);
+  const identity=el("div");identity.append(el("strong","Linggau AI Studio"),el("small","Workspace kreatif · v"+version+(revision?" · "+revision.slice(0,7):"")));brand.append(identity);
   const ready=el("small",client.available().imageToImage?"Mesin AI tersedia · akses diuji saat proses":"Mesin AI tidak terhubung","bridge-status");
   const toggle=button("☰  Alat AI",()=>setDrawer(!drawerOpen),"menu-toggle");toggle.setAttribute("aria-controls","studio-sidebar");toggle.setAttribute("aria-expanded","false");
   top.append(brand,ready,toggle);
