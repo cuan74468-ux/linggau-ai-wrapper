@@ -37,10 +37,22 @@ export function createAIClient(bridge) {
     active=true;
     try{const result=await bridge.generateText({prompt,images:[]});if(result?.kind!=="text"||typeof result.text!=="string"||!result.text.trim()||result.text.length>40000)throw Error("AI_OUTPUT_INVALID");return result;}finally{active=false;}
   }
-  return Object.freeze({execute,chat, available:()=>Object.freeze({imageToImage:typeof bridge?.editImage==="function"&&bridge.available!==false,textToImage:typeof bridge?.generateImage==="function"&&bridge.available!==false,textToText:typeof bridge?.generateText==="function"&&bridge.available!==false}),busy:()=>active});
+  async function backdrop(prompt){
+    if(active)throw Error("AI_BUSY");
+    if(typeof prompt!=="string"||!prompt.trim()||prompt.length>12000)throw Error("PROMPT_LIMIT");
+    if(typeof bridge?.generateImage!=="function"||bridge.available===false)throw Error("AI_BRIDGE_NOT_CONNECTED");
+    active=true;
+    try{const result=await bridge.generateImage({prompt,images:[]});if(result?.kind!=="image"||imageBytes(result)>MAX_IMAGE)throw Error("AI_OUTPUT_INVALID");return result;}finally{active=false;}
+  }
+  return Object.freeze({execute,chat,backdrop, available:()=>Object.freeze({imageToImage:typeof bridge?.editImage==="function"&&bridge.available!==false,textToImage:typeof bridge?.generateImage==="function"&&bridge.available!==false,textToText:typeof bridge?.generateText==="function"&&bridge.available!==false}),busy:()=>active});
 }
 export function friendlyError(error){
   const m=String(error?.message||error);
+  if(m.includes("LOCAL_IMAGE_LIMIT")) return "Mode lokal mendukung foto hingga 4 megapiksel dan sisi maksimal 4096 px. Gunakan foto lebih kecil.";
+  if(m.includes("LOCAL_OUTPUT_LIMIT")) return "PNG hasil melebihi 8 MB. Gunakan foto beresolusi lebih kecil.";
+  if(m.includes("MASK_")) return "Tandai keliling objek dengan minimal tiga titik dan sisakan area latar.";
+  if(m.includes("BACKGROUND_UNCHANGED")) return "Pilih latar baru atau isi deskripsi latar.";
+  if(m.includes("LOCAL_CANVAS")) return "Pemrosesan lokal tidak tersedia pada browser ini.";
   if(m.includes("401")) return "Akses AI belum terautentikasi. Pastikan akun Google masuk, beri waktu runtime siap, lalu tekan Coba Lagi secara manual.";
   if(m.includes("403")) return "Akses AI ditolak. Periksa izin akun dan fitur Gemini. Jangan memasukkan API key atau mengaktifkan billing.";
   if(m.includes("429")) return "Batas pemakaian AI tercapai. Coba lagi nanti secara manual.";
