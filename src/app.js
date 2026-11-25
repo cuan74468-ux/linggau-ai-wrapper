@@ -3,6 +3,7 @@ import { createAIClient, friendlyError } from "./core/ai-client.js";
 import { createAssetStore } from "./core/assets.js";
 import { readImage, decodeImage } from "./core/images.js";
 import {assessOutput} from "./core/quality.js";
+import {needsReferenceReview,createReferenceReview} from "./core/reference-review.js";
 import {validatePresets,applyPreset} from "./core/presets.js";
 import {createChatSession,CHAT_MAX_INPUT} from "./core/chat.js";
 
@@ -236,12 +237,30 @@ export async function mount({root,ai,version,revision=""}){
         const res=await client.execute(f,{...values},slots);
         let verified=res;if(res.kind==="image"){const dimensions=await decodeImage(res);verified={...res,width:dimensions.width,height:dimensions.height};}
         verified={...verified,quality:assessOutput(f,values,verified,slots)};
-        result=store.add(verified,f.id,slots.filter(x=>x.id).map(x=>x.id));resultCard(result,output);showPane("output");if(compact.matches)tabs.scrollIntoView({block:"start"});
-        if(res.kind==="image"&&slots.length){
-          const compare=el("details",null,"quality-panel");compare.append(el("summary","Bandingkan foto sumber"));slots.forEach((source,i)=>{compare.append(el("small",f.slots[i]),image(source));});output.append(compare);
-        }
-        output.append(button("Sesuaikan & buat ulang",()=>{if(active)return;showPane("input");const notes=form.querySelector("#param-notes");if(notes){notes.scrollIntoView({block:"center"});notes.focus();}status.textContent="Sesuaikan parameter atau catatan. Tekan Proses AI untuk satu permintaan baru; hasil sebelumnya tetap di riwayat.";}));
-        status.textContent=(verified.quality.checks.some(c=>c.state==="warn")?"Perlu diperiksa · ":"Selesai · ")+(res.elapsedMs/1000).toFixed(1)+" detik";ready.textContent="Mesin AI · permintaan terakhir berhasil";renderNavigation();
+        const jobSources=[...slots], parents=jobSources.filter(x=>x.id).map(x=>x.id);
+        const adjust=()=>{if(active)return;showPane("input");const notes=form.querySelector("#param-notes");if(notes){notes.scrollIntoView({block:"center"});notes.focus();}status.textContent="Sesuaikan pengaturan sebelum memproses ulang.";};
+        const finish=accepted=>{
+          result=store.add(accepted,f.id,parents);resultCard(result,output);
+          if(jobSources.length){const compare=el("details",null,"quality-panel");compare.append(el("summary","Bandingkan foto sumber"));jobSources.forEach((source,i)=>{compare.append(el("small",f.slots[i]),image(source));});output.append(compare);}
+          output.append(button("Sesuaikan & buat ulang",adjust));
+          status.textContent=(verified.quality.checks.some(c=>c.state==="warn")?"Perlu diperiksa · ":"Selesai · ")+(res.elapsedMs/1000).toFixed(1)+" detik";
+          ready.textContent="Mesin AI · permintaan terakhir berhasil";renderNavigation();
+        };
+        showPane("output");if(compact.matches)tabs.scrollIntoView({block:"start"});
+        if(needsReferenceReview(f)){
+          const review=createReferenceReview(f,verified,jobSources);
+          output.replaceChildren(el("h2","Periksa hasil"),el("p","Pastikan subjek, wajah (jika ada), dan detail asli tetap sesuai. Hasil belum disimpan."));
+          const comparison=el("div",null,"reference-compare");
+          const original=el("figure");original.append(el("figcaption","Foto asli"),image(jobSources[0]));
+          const candidate=el("figure");candidate.append(el("figcaption","Hasil AI"),image(verified));comparison.append(original,candidate);output.append(comparison);
+          if(jobSources.length>1){const reference=el("details",null,"quality-panel");reference.append(el("summary","Referensi tambahan"));jobSources.slice(1).forEach((s,i)=>reference.append(el("small",f.slots[i+1]),image(s)));output.append(reference);}
+          const warnings=verified.quality.checks.filter(c=>c.state==="warn");
+          for(const warning of warnings)output.append(el("small",warning.label,"quality-warn"));
+          const actions=el("div",null,"actions");
+          actions.append(button("Sesuai, gunakan",()=>{if(active||epoch!==viewEpoch||review.state()!=="pending")return;try{finish(review.accept());}catch(e){output.replaceChildren(el("p",friendlyError(e)));}},"primary"),
+          button("Tidak sesuai",()=>{if(active||epoch!==viewEpoch||review.state()!=="pending")return;review.reject();result=null;output.replaceChildren(el("h2","Hasil ditolak"),el("p","Foto sumber tetap utuh. Hasil tidak disimpan atau dipakai ulang."),button("Kembali ke pengaturan",adjust));status.textContent="Hasil ditolak oleh pengguna.";ready.textContent="Hasil tidak disetujui";}));
+          output.append(actions);status.textContent="Menunggu pemeriksaan hasil.";ready.textContent="Hasil AI belum disetujui";
+        }else finish(verified);
       }catch(e){output.replaceChildren(el("p","Tidak ada hasil yang valid.","empty"));status.textContent=friendlyError(e);ready.textContent="Mesin AI · permintaan terakhir gagal";retry.hidden=false;}
       finally{active=false;refresh();}
     }

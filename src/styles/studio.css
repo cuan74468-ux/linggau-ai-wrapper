@@ -220,3 +220,5 @@
  #studio .card{padding:8px}
  #studio .choice>span.choice-caption{padding:5px;font-size:12px}
 }
+
+#studio .reference-compare{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-items:start;margin:10px 0}#studio .reference-compare figure{margin:0;min-width:0}#studio .reference-compare figcaption{font-size:12px;font-weight:700;margin:0 0 5px}#studio .reference-compare img{display:block;width:100%;height:auto;max-height:360px;object-fit:contain;background:var(--board);border:1px solid var(--ink);border-radius:8px}#studio .quality-warn{color:#80501d}

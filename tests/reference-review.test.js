@@ -1,0 +1,16 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {findFeatures,getFeature} from "../src/core/feature-registry.js";
+import {buildPrompt} from "../src/core/universal-lock.js";
+import {normalize} from "../src/core/parameters.js";
+import {createAIClient} from "../src/core/ai-client.js";
+import {createAssetStore} from "../src/core/assets.js";
+import {needsReferenceReview,createReferenceReview} from "../src/core/reference-review.js";
+import {readFileSync} from "node:fs";
+const img={kind:"image",mimeType:"image/png",base64:"AAAA",width:800,height:1000};
+test("all reference tools prioritize identity before style, including incidental people",()=>{for(const f of findFeatures().filter(needsReferenceReview)){const input=Object.fromEntries(f.fields.filter(p=>p.required).map(p=>[p.id,"test"]));const p=buildPrompt(f,normalize(f,input));assert.ok(p.startsWith("SOURCE FIDELITY"));assert.match(p,/HUMAN IDENTITY LOCK/);assert.match(p,/FINAL IDENTITY CHECK/);assert.match(p,/No face regeneration/);}});
+test("reference transport preserves actual bytes, order and dimensions in prompt",async()=>{const f=getFeature("virtual-try-on");let calls=0;const c=createAIClient({editImage:async r=>{calls++;assert.equal(r.images[0].base64,"AAAA");assert.equal(r.images[1].base64,"BBBB");assert.match(r.prompt,/Image 1: Foto model dewasa \(800 × 1000 px\)/);return img;}});await c.execute(f,{},[img,{...img,base64:"BBBB"}]);assert.equal(calls,1);});
+test("unreviewed or rejected reference edits cannot enter assets",()=>{const f=getFeature("background"),s=createAssetStore(),r=createReferenceReview(f,img,[img]);assert.throws(()=>s.add(img,f.id),/REFERENCE_REVIEW_REQUIRED/);r.reject();assert.throws(()=>r.accept(),/REFERENCE_REVIEW_CLOSED/);assert.equal(s.list().length,0);});
+test("accepted reference output enters store only once through review",()=>{const f=getFeature("background"),s=createAssetStore(),r=createReferenceReview(f,img,[img]);const a=s.add(r.accept(),f.id);assert.equal(a.referenceReview,"user-accepted");assert.throws(()=>r.accept(),/REFERENCE_REVIEW_CLOSED/);assert.equal(s.list().length,1);});
+test("text and text-to-image do not require reference review",()=>{assert.equal(needsReferenceReview(getFeature("ai-model")),false);assert.equal(needsReferenceReview(getFeature("seo-caption")),false);});
+test("app shows candidate and original before accepting or saving",()=>{const app=readFileSync(new URL("../src/app.js",import.meta.url),"utf8");assert.match(app,/createReferenceReview\(f,verified,jobSources\)/);assert.match(app,/finish\(review.accept\(\)\)/);assert.match(app,/review.reject\(\)/);assert.match(app,/Foto asli/);assert.match(app,/Hasil belum disimpan/);});

@@ -14,7 +14,7 @@ export function createAIClient(bridge) {
     if(!Array.isArray(images)||images.length!==feature.slots.length) throw new Error("Lengkapi semua foto referensi.");
     const sizes=images.map(imageBytes);
     if(sizes.some(s=>s>MAX_IMAGE)||sizes.reduce((a,b)=>a+b,0)>MAX_TOTAL) throw new Error("IMAGE_LIMIT");
-    const prompt=buildPrompt(feature,normalized);
+    const prompt=buildPrompt(feature,normalized,images);
     if(prompt.length>12000)throw new Error("PROMPT_LIMIT");
     const aspectRatio=RATIOS.includes(normalized.ratio)&&normalized.ratio!=="auto"?normalized.ratio:undefined;
     const req={prompt,images:images.map(({mimeType,base64})=>({mimeType,base64})),aspectRatio};
