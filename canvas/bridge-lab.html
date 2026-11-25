@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Linggau AI Bridge Lab</title>
+<style>
+body{margin:0;background:#fafafa;color:#17202a}
+#app{min-height:100vh}
+.boot{padding:24px;font:16px/1.5 system-ui,sans-serif;overflow-wrap:anywhere}
+</style>
+</head>
+<body>
+<main id="app"><p class="boot" role="status">Memuat modul CDN…</p></main>
+<script>
+const apiKey = "";
+const model = "gemini-3.1-flash-image";
+const endpoint = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + apiKey;
+const moduleURL = "https://cdn.jsdelivr.net/gh/cuan74468-ux/linggau-ai-wrapper@8a73daf3240a1c470ffab03d7aea619e47c1e2b0/src/bridge-lab.js";
+const types = new Set(["image/jpeg", "image/png"]);
+const maxInput = 2 * 1024 * 1024;
+let inFlight = false;
+const root = document.getElementById("app");
+
+function validBase64(value, maxBytes) {
+  if (typeof value !== "string" || !value || value.length % 4 !== 0 ||
+      value.length > Math.ceil(maxBytes / 3) * 4 ||
+      !/^[A-Za-z0-9+/]+={0,2}$/.test(value)) return false;
+  const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
+  return value.length * 3 / 4 - padding <= maxBytes;
+}
+
+const aiBridge = Object.freeze({
+  async editImage({ mimeType, base64, prompt } = {}) {
+    if (inFlight) throw new Error("AI_BUSY");
+    if (!types.has(mimeType) || !validBase64(base64, maxInput) ||
+        typeof prompt !== "string" || !prompt.trim() || prompt.length > 4000) {
+      throw new Error("AI_INPUT_INVALID");
+    }
+    inFlight = true;
+    const start = performance.now();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120000);
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [
+            { text: prompt.trim() },
+            { inlineData: { mimeType, data: base64 } }
+          ] }],
+          generationConfig: { responseModalities: ["TEXT", "IMAGE"] }
+        })
+      });
+      if (!response.ok) throw new Error("AI_HTTP_" + response.status);
+      const json = await response.json();
+      const parts = json?.candidates?.[0]?.content?.parts;
+      const image = Array.isArray(parts) && parts.find(p =>
+        types.has(p?.inlineData?.mimeType) &&
+        validBase64(p.inlineData.data, 16 * 1024 * 1024)
+      );
+      if (!image) throw new Error("AI_NO_VALID_IMAGE");
+      return {
+        mimeType: image.inlineData.mimeType,
+        base64: image.inlineData.data,
+        httpStatus: response.status,
+        model,
+        elapsedMs: Math.round(performance.now() - start)
+      };
+    } catch (error) {
+      if (controller.signal.aborted) throw new Error("AI_TIMEOUT_120S (no automatic retry)");
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+      inFlight = false;
+    }
+  }
+});
+
+(async () => {
+  try {
+    const mod = await import(moduleURL);
+    if (typeof mod.mountBridgeLab !== "function") throw new Error("MODULE_CONTRACT_INVALID");
+    mod.mountBridgeLab(root, aiBridge);
+  } catch (error) {
+    root.textContent = "BOOT FAILED: " + error.message;
+  }
+})();
+</script>
+</body>
+</html>
