@@ -8,12 +8,12 @@ const root=process.cwd(), dir=await mkdtemp(resolve(tmpdir(),"studio-smoke-"));
 const types={".html":"text/html",".js":"text/javascript",".mjs":"text/javascript",".css":"text/css",".svg":"image/svg+xml"};
 const server=createServer(async(req,res)=>{try{const path=resolve(root,"."+new URL(req.url,"http://localhost").pathname);if(!path.startsWith(root+sep)||!types[extname(path)]){res.writeHead(404).end();return;}res.writeHead(200,{"Content-Type":types[extname(path)]});res.end(await readFile(path===resolve(root,"src/core/vision.js")?resolve(root,"tests/browser/vision-fixture.js"):path));}catch{res.end();}});
 await new Promise(r=>server.listen(0,"127.0.0.1",r));
-const browser=spawn(process.env.CHROME_BIN||"google-chrome",["--headless=new","--no-sandbox","--disable-dev-shm-usage","--disable-gpu","--no-first-run","--remote-debugging-port=0","--user-data-dir="+dir,"about:blank"],{stdio:"ignore"});
-let ws, spawnError;browser.on("error",e=>{spawnError=e});
+const browser=spawn(process.env.CHROME_BIN||"google-chrome",["--headless=new","--no-sandbox","--disable-dev-shm-usage","--disable-gpu","--no-first-run","--remote-debugging-port=0","--user-data-dir="+dir,"about:blank"],{stdio:["ignore","ignore","pipe"]});
+let ws, spawnError, stderr="";browser.on("error",e=>{spawnError=e});browser.stderr?.on("data",b=>{stderr=(stderr+String(b)).slice(-3000);});
 try{
  let port;
- for(let i=0;i<100;i++){if(spawnError)throw spawnError;try{port=(await readFile(resolve(dir,"DevToolsActivePort"),"utf8")).split("\n")[0];break;}catch{await delay(100);}}
- if(!port)throw Error("Chromium failed to start");
+ for(let i=0;i<300;i++){if(spawnError)throw spawnError;if(browser.exitCode!==null)throw Error("Chromium exited "+browser.exitCode+": "+stderr);try{port=(await readFile(resolve(dir,"DevToolsActivePort"),"utf8")).split("\n")[0];break;}catch{await delay(100);}}
+ if(!port)throw Error("Chromium failed to start: "+stderr);
  const pages=await (await fetch("http://127.0.0.1:"+port+"/json/list")).json();const page=pages.find(p=>p.type==="page");if(!page)throw Error("No Chromium page");
  ws=new WebSocket(page.webSocketDebuggerUrl);await new Promise((resolve,reject)=>{ws.addEventListener("open",resolve,{once:true});ws.addEventListener("error",reject,{once:true});});
  let seq=0;const pending=new Map();ws.addEventListener("message",e=>{const m=JSON.parse(e.data);if(pending.has(m.id)){const {resolve,reject}=pending.get(m.id);pending.delete(m.id);m.error?reject(Error(JSON.stringify(m.error))):resolve(m.result);}});
