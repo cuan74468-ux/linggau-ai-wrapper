@@ -41,18 +41,21 @@ async function run(){
  // Opaque input and vision fixture: browser dialogs must not be required.
  const opaque=document.createElement("canvas");opaque.width=80;opaque.height=100;const o=opaque.getContext("2d");o.fillStyle="#ccc";o.fillRect(0,0,80,100);o.drawImage(sample,0,0);
  const opaqueBlob=await new Promise(r=>opaque.toBlob(r,"image/png"));const dt=new DataTransfer();dt.items.add(new File([opaqueBlob],"opaque.png",{type:"image/png"}));const fi=document.querySelector("#photo-0");fi.files=dt.files;fi.dispatchEvent(new Event("change",{bubbles:true}));
- await wait(()=>document.querySelector(".mask-area")?.textContent.includes("0 titik"),"opaque mask pending");
- assert(btn(document,"Proses foto").disabled,"missing mask gate");
- assert(document.querySelector(".process-blocker").textContent.includes("Deteksi objek"),"visible missing mask reason");
+ await wait(()=>document.querySelector(".mask-area")?.textContent.includes("Siap deteksi otomatis"),"opaque input ready");
+ assert(!document.querySelector(".precision-correction").open,"advanced corrections collapsed");
+ document.querySelector('input[name="param-background"][value="Putih bersih"]').click();
+ assert(!btn(document,"Proses foto").disabled,"auto detection can start with no manual mask");
  window.confirm=()=>{throw Error("native dialog not permitted");};
- btn(document,"Deteksi objek (AI lokal)").click();
- await wait(()=>document.querySelector(".mask-area")?.textContent.includes("Mask terdeteksi"),"mock vision detection without native dialog");
- assert(document.querySelector(".input-panel .status").textContent.includes("Objek terdeteksi"),"visible success");
- assert(!btn(document,"Proses foto").disabled,"valid detected mask enables process");
+ btn(document,"Proses foto").click();
+ await wait(()=>btn(document,"Sesuai, gunakan"),"automatic detection and processing");
+ assert(calls===0,"solid background uses no Gemini");
+ btn(document,"Sesuai, gunakan").click();
+ await wait(()=>btn(document,"Unduh gambar"),"auto output accepted");
+ document.querySelector(".precision-correction").open=true;
  btn(document,"Deteksi objek (AI lokal)").click();
  await wait(()=>document.querySelector(".input-panel .status").textContent.includes("Model atau WASM"),"mock model failure visible");
  assert(!btn(document,"Proses foto").disabled,"previous valid mask retained after failed redetection");
- window.__smoke={ok:true,detail:"PNG round-trip, local sharpen, 360px workspace, alpha upload, review, product mode and mocked vision success/failure feedback passed"};
+ window.__smoke={ok:true,detail:"PNG round-trip, local sharpen, 360px workspace, alpha upload, review, product mode and automatic opaque input workflow and mocked vision failure feedback passed"};
 }
 run().catch(e=>{window.__smoke={ok:false,detail:e.stack||String(e)}});
 </script></body></html>

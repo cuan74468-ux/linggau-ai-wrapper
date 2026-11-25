@@ -230,3 +230,5 @@
 #studio .precision-option{display:flex;align-items:center;gap:8px;margin:10px 0 0;font-size:13px}#studio .precision-option input{width:20px;height:20px;min-height:0;padding:0;flex:none;accent-color:#4338ca}#studio .mask-canvas{background:repeating-conic-gradient(#ddd 0% 25%,#fff 0% 50%) 0 0/16px 16px}#studio .mask-area .actions button{font-size:12px;padding:6px 8px;min-height:44px}
 
 #studio .process-blocker{margin:6px 0;color:var(--muted);font-size:13px;line-height:1.4}#studio .mask-area [role=status]{font-weight:600;overflow-wrap:break-word}
+
+#studio .precision-active .source-preview img{display:block;max-height:200px;object-fit:contain}#studio .precision-correction{margin-top:10px;border-top:1px solid var(--line);padding-top:6px}#studio .precision-correction summary{cursor:pointer;padding:8px 0;font-size:13px;font-weight:650}#studio .precision-panel{background:var(--paper)}
