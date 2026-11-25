@@ -57,5 +57,5 @@ async function run(){
  assert(!btn(document,"Proses foto").disabled,"previous valid mask retained after failed redetection");
  window.__smoke={ok:true,detail:"PNG round-trip, local sharpen, 360px workspace, alpha upload, review, product mode and automatic opaque input workflow and mocked vision failure feedback passed"};
 }
-run().catch(e=>{window.__smoke={ok:false,detail:e.stack||String(e)}});
+run().catch(e=>{window.__smoke={ok:false,detail:(e.stack||String(e))+" | status: "+document.querySelector(".input-panel .status")?.textContent+" | output: "+document.querySelector(".output-panel")?.textContent?.slice(0,400)}});
 </script></body></html>
