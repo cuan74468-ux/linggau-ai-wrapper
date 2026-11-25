@@ -47,10 +47,10 @@ async function run(){
  window.confirm=()=>{throw Error("native dialog not permitted");};
  btn(document,"Deteksi objek (AI lokal)").click();
  await wait(()=>document.querySelector(".mask-area")?.textContent.includes("Mask terdeteksi"),"mock vision detection without native dialog");
- assert(document.querySelector(".status").textContent.includes("Objek terdeteksi"),"visible success");
+ assert(document.querySelector(".input-panel .status").textContent.includes("Objek terdeteksi"),"visible success");
  assert(!btn(document,"Proses foto").disabled,"valid detected mask enables process");
  btn(document,"Deteksi objek (AI lokal)").click();
- await wait(()=>document.querySelector(".status").textContent.includes("Model atau WASM"),"mock model failure visible");
+ await wait(()=>document.querySelector(".input-panel .status").textContent.includes("Model atau WASM"),"mock model failure visible");
  assert(!btn(document,"Proses foto").disabled,"previous valid mask retained after failed redetection");
  window.__smoke={ok:true,detail:"PNG round-trip, local sharpen, 360px workspace, alpha upload, review, product mode and mocked vision success/failure feedback passed"};
 }
