@@ -7,7 +7,30 @@ function el(tag,text,cls){const n=document.createElement(tag);if(text!=null)n.te
 function button(text,fn,cls){const n=el("button",text,cls);n.type="button";n.addEventListener("click",fn);return n;}
 function image(asset){const n=el("img");n.alt="Aset visual";n.src="data:"+asset.mimeType+";base64,"+asset.base64;return n;}
 function download(asset){const a=el("a");const ext={"image/jpeg":"jpg","image/png":"png","image/webp":"webp"}[asset.mimeType];const blob=new Blob([Uint8Array.from(atob(asset.base64),c=>c.charCodeAt(0))],{type:asset.mimeType});const url=URL.createObjectURL(blob);a.href=url;a.download="linggau-"+asset.id+"."+ext;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
-async function copy(text){if(!navigator.clipboard?.writeText)throw new Error("Clipboard tidak tersedia. Pilih teks hasil secara manual.");await navigator.clipboard.writeText(text);}
+// Canvas may block Clipboard API. Fall back to selection and explicit manual copy.
+export async function copyResult(field, {nav=globalThis.navigator, doc=globalThis.document}={}){
+  const select=()=>{field.focus();field.select();field.setSelectionRange(0,field.value.length);};
+  // Select synchronously while the click still has user activation.
+  select();
+  try{
+    if(typeof nav?.clipboard?.writeText==="function"){
+      await nav.clipboard.writeText(field.value);
+      return "clipboard";
+    }
+  }catch{/* Permission denied: try legacy copy, otherwise leave text selected. */}
+  try{
+    select();
+    if(typeof doc?.execCommand==="function"&&doc.execCommand("copy"))return "legacy";
+  }catch{/* Some sandboxed frames deny both copy paths. */}
+  select();
+  return "manual";
+}
+function downloadText(asset){
+  const url=URL.createObjectURL(new Blob([asset.text],{type:"text/plain;charset=utf-8"}));
+  const a=el("a");a.href=url;a.download="linggau-"+asset.id+".txt";
+  document.body.append(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),30000);
+}
 export async function mount({root,ai,version}){
   if(!(root instanceof HTMLElement))throw new Error("APP_ROOT_INVALID");
   const client=createAIClient(ai), store=createAssetStore();
@@ -77,7 +100,22 @@ export async function mount({root,ai,version}){
   function resultCard(asset,target){
     target.replaceChildren(el("h3","Hasil · "+(getFeature(asset.featureId)?.title||asset.featureId)));
     if(asset.kind==="image"){target.append(image(asset),button("Unduh",()=>download(asset),"primary"));}
-    else{target.append(el("pre",asset.text),button("Salin teks",async()=>{try{await copy(asset.text);tell("Teks disalin.");}catch(e){tell(e.message);}}));}
+    else{
+      const field=el("textarea",null,"text-result");field.value=asset.text;field.readOnly=true;field.rows=14;field.setAttribute("aria-label","Teks hasil AI");
+      const feedback=el("p",null,"copy-feedback");feedback.setAttribute("role","status");feedback.setAttribute("aria-live","polite");
+      const actions=el("div",null,"actions");
+      const copyButton=button("Salin teks",async()=>{
+        copyButton.disabled=true;
+        try{
+          const mode=await copyResult(field);
+          feedback.textContent=mode==="manual"?"Teks sudah dipilih. Tekan Ctrl+C atau gunakan menu Salin di HP.":"Teks berhasil disalin.";
+        }catch{feedback.textContent="Salin otomatis tidak tersedia. Gunakan Pilih semua atau Unduh TXT.";}
+        finally{copyButton.disabled=false;}
+      },"primary");
+      actions.append(copyButton,button("Pilih semua",()=>{field.focus();field.select();field.setSelectionRange(0,field.value.length);feedback.textContent="Teks dipilih. Tekan Ctrl+C atau gunakan menu Salin di HP.";}),
+        button("Unduh TXT",()=>{try{downloadText(asset);}catch{feedback.textContent="Unduhan dibatasi browser. Gunakan Pilih semua untuk menyalin teks.";}}));
+      target.append(field,actions,feedback);
+    }
     target.append(el("small","Model: "+asset.model+" · HTTP "+asset.httpStatus+" · "+asset.elapsedMs+" ms"));
     if(asset.kind==="image"){
       const sel=el("select");sel.setAttribute("aria-label","Fitur tujuan");const placeholder=el("option","Pakai ulang ke fitur…");placeholder.value="";sel.append(placeholder);

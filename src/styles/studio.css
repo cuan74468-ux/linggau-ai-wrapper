@@ -54,3 +54,7 @@
 #studio [hidden]{display:none!important}
 @media(max-width:1050px){#studio .frame{grid-template-columns:224px minmax(0,1fr);gap:16px}#studio .layout{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:700px){#studio{padding:0 12px 16px}#studio .top{min-height:64px}#studio .bridge-status{order:3;max-width:none;flex-basis:100%}#studio .menu-toggle{display:block}#studio .frame{display:block}#studio .sidebar{display:none;position:static;max-height:65dvh;border:1px solid var(--line);border-radius:12px;background:var(--paper);padding:12px;margin-top:12px}#studio.drawer-open .sidebar{display:block}#studio .work{padding:18px 0}#studio .card{padding:13px}#studio .output-panel{min-height:240px}#studio .actions button{flex:1 1 auto}#studio .grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr))}#studio .tool{min-height:130px;padding:12px}#studio .tool strong{font-size:15px}}
+
+#studio .text-result{display:block;min-height:260px;resize:vertical;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text;-webkit-user-select:text}
+#studio .copy-feedback{font-size:13px;margin:10px 0;min-height:1.5em}
+#studio .output-panel .actions{margin-bottom:10px}
