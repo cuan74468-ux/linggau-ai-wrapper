@@ -3,6 +3,7 @@ import { createAIClient, friendlyError } from "./core/ai-client.js";
 import { createAssetStore } from "./core/assets.js";
 import { readImage, decodeImage } from "./core/images.js";
 import {assessOutput} from "./core/quality.js";
+import {validatePresets,applyPreset} from "./core/presets.js";
 import {createChatSession,CHAT_MAX_INPUT} from "./core/chat.js";
 
 function el(tag,text,cls){const n=document.createElement(tag);if(text!=null)n.textContent=text;if(cls)n.className=cls;return n;}
@@ -172,7 +173,7 @@ export async function mount({root,ai,version,revision=""}){
   }
   function workspace(f,initial=null,initialIndex=0){
     page="tool";current=f;slots=f.slots.map(()=>null);result=null;if(initial)slots[initialIndex]=initial;
-    const epoch=viewEpoch;let loading=0;const revisions=f.slots.map(()=>0);const values={};const inputs=[];
+    const epoch=viewEpoch;let loading=0;const revisions=f.slots.map(()=>0);const values={};const inputs=[];const radios=new Map();
     const heading=el("div",null,"tool-heading");heading.append(el("small",f.category),el("h1",f.title),el("p",f.description));view.replaceChildren(heading);
     const layout=el("div",null,"layout"), form=el("section",null,"card input-panel"), output=el("section",null,"card output-panel");
     form.id="studio-input";output.id="studio-output";
@@ -201,6 +202,12 @@ export async function mount({root,ai,version,revision=""}){
       const upload=el("div",null,"upload-zone");upload.append(label,file,drop,el("small","JPG, PNG, WebP · maks. 8 MB per foto"));if(f.id==="virtual-try-on")upload.append(el("small",i===0?"Gunakan foto tubuh dengan area pakaian terlihat jelas. Foto wajah saja hanya dapat mengedit pakaian yang terlihat; jangan gunakan untuk try-on seluruh badan.":"Gunakan foto pakaian yang jelas, idealnya tanpa model lain. Hanya pakaian dari foto ini yang ditransfer."));upload.append(picker,preview);if(initial&&initialIndex===i)picker.value=initial.id;inputs.push(file,picker,browse,remove);form.append(upload);draw();
     });
     if(f.slots.length)form.append(el("h2","2. Pengaturan edit","section-heading"));
+    const presets=validatePresets(f), presetLabel=el("label","Preset kerja");presetLabel.htmlFor="studio-preset";
+    const presetPicker=el("select");presetPicker.id="studio-preset";presetPicker.setAttribute("aria-label","Preset kerja");
+    const manual=el("option","Pengaturan sendiri");manual.value="";presetPicker.append(manual);
+    presets.forEach((p,i)=>{const op=el("option",p.label);op.value=String(i);presetPicker.append(op);});
+    presetPicker.addEventListener("change",()=>{if(active||!presetPicker.value)return;Object.assign(values,applyPreset(f,values,Number(presetPicker.value)));for(const [id,items] of radios)for(const radio of items)radio.checked=values[id]===radio.value;refresh();});
+    form.append(presetLabel,presetPicker);inputs.push(presetPicker);
     for(const field of f.fields){
       const id="param-"+field.id, label=el("label",field.label+(field.required?" *":""));label.htmlFor=id;
       values[field.id]=field.default||"";
@@ -211,7 +218,8 @@ export async function mount({root,ai,version,revision=""}){
           const choice=el("label",null,"choice");const input=el("input");input.type="radio";input.name=id;input.value=val;input.id=id+"-"+i;input.checked=val===values[field.id];
           const caption=el("span",val==="auto"?"Otomatis":val,"choice-caption");
           if(field.id==="ratio"&&val!=="auto"){const shape=el("span",null,"ratio-shape");const [w,h]=val.split(":").map(Number);shape.style.width=String(22*w/Math.max(w,h))+"px";shape.style.height=String(22*h/Math.max(w,h))+"px";caption.prepend(shape);}
-          input.addEventListener("change",()=>{if(input.checked){values[field.id]=input.value;refresh();}});
+          if(!radios.has(field.id))radios.set(field.id,[]);radios.get(field.id).push(input);
+          input.addEventListener("change",()=>{if(input.checked){values[field.id]=input.value;refresh();presetPicker.value="";}});
           choice.append(input,caption);choices.append(choice);inputs.push(input);
         });fieldset.append(choices);form.append(fieldset);
       }else{
@@ -227,7 +235,7 @@ export async function mount({root,ai,version,revision=""}){
       try{
         const res=await client.execute(f,{...values},slots);
         let verified=res;if(res.kind==="image"){const dimensions=await decodeImage(res);verified={...res,width:dimensions.width,height:dimensions.height};}
-        verified={...verified,quality:assessOutput(f,values,verified)};
+        verified={...verified,quality:assessOutput(f,values,verified,slots)};
         result=store.add(verified,f.id,slots.filter(x=>x.id).map(x=>x.id));resultCard(result,output);showPane("output");if(compact.matches)tabs.scrollIntoView({block:"start"});
         if(res.kind==="image"&&slots.length){
           const compare=el("details",null,"quality-panel");compare.append(el("summary","Bandingkan foto sumber"));slots.forEach((source,i)=>{compare.append(el("small",f.slots[i]),image(source));});output.append(compare);

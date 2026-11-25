@@ -14,6 +14,6 @@ export async function readImage(file){
     const r=new FileReader();r.onload=()=>resolve(String(r.result));r.onerror=()=>reject(new Error("FILE_READ_FAILED"));r.readAsDataURL(file);
   });
   const image={mimeType:file.type,base64:data.split(",")[1]};
-  await decodeImage(image);
-  return image;
+  const dimensions=await decodeImage(image);
+  return {...image,width:dimensions.width,height:dimensions.height};
 }

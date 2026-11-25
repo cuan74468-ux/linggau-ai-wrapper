@@ -1,12 +1,14 @@
 import { FEATURES, CATEGORIES } from "../features/index.js";
 import { getSkill } from "./skills.js";
+import {validatePresets} from "./presets.js";
+import {craftMethod} from "./craft-methods.js";
 import { RULES, TEXT_RULES } from "./parameter-rules.js";
 export { CATEGORIES };
 export function validateRegistry(features=FEATURES) {
   const ids=new Set();
   for(const f of features){
     if(!f.id || ids.has(f.id) || !CATEGORIES.includes(f.category)) throw new Error("FEATURE_INVALID");
-    ids.add(f.id);getSkill(f.id);
+    ids.add(f.id);getSkill(f.id);validatePresets(f);craftMethod(f.id);
     for(const p of f.fields){if(p.id==="ratio")continue;if(p.options){if(p.options.some(v=>!RULES[p.id]?.[v]))throw Error("PARAMETER_RULE_MISSING_"+f.id+"_"+p.id);}else if(!TEXT_RULES[p.id])throw Error("PARAMETER_RULE_MISSING_"+f.id+"_"+p.id);}
     if(!["image-to-image","text-to-image","text-to-text"].includes(f.engine)) throw new Error("ENGINE_INVALID");
     if(f.engine==="image-to-image" ? f.slots.length<1||f.slots.length>2 : f.slots.length!==0) throw new Error("SLOTS_INVALID");
