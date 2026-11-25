@@ -1,0 +1,23 @@
+# Loader hardening — 25 November 2026
+
+Candidate only, based on b75d845. Not deployed into the existing Gemini Canvas. Do not replace the durable shell until its real Canvas test passes.
+
+## Contract
+
+Pointer (mutable GitHub Raw) accepts existing {name,version,shellApi,entry,commit} and new {name,version,minShellApi,maxShellApi,bridgeApi,entry,commit,releasedAt}. commit must be 40 lowercase hex and entry src/app.js. New publishers should emit the range and timestamp; existing preview pointer is intentionally unchanged. manifest.json in source remains version metadata to avoid self-referential commit hashes; publication pointer contains SHA. Legacy stable 0.1.0 resolves to the reviewed foundation commit, not a tag. No mutable CDN import. Raw already passed an owner Canvas load; no Pages deployment exists. Raw/CDN propagation and CORS not guaranteed; measure rollback before promising ten minutes.
+
+Manifest watchdog 15s; module HTTP GET preflight 10s; native import deadline 20s; mount deadline 10s. Worst-case first attempt budget 55s, one LKG attempt adds up to 40s (excluding scheduling delays). Native import cannot be cancelled; detached staging and cooperative abort reduce visible races, not arbitrary code execution. LKG stores only normalized manifest after mount success, per channel, with best-effort localStorage; no storage means no cached fallback. No cross-channel or tag fallback. LKG is local metadata, not a security signature. Runtime global handlers show friendly failure and sanitized copyable diagnostics. Candidate mount returns unmount; older module support remains best-effort.
+
+## AI bridge v2
+
+editImage({prompt,images:[{mimeType,base64}, ...],aspectRatio?,signal?}) -> Promise<{kind:"image",mimeType,base64,model,httpStatus,elapsedMs}>; 1–2 ordered references. generateImage accepts same request without references; generateText accepts prompt and no images/ratio and returns {kind:"text",text,model,httpStatus,elapsedMs}. MIME JPEG/PNG/WebP; base64 syntax and byte size validated, not full content authenticity at transport; workspace decodes images separately. 8 MiB per image/12 MiB combined, 12,000 prompt chars, 40,000 text output chars. Single flight, 120s abort; optional AbortSignal cancels client fetch; host/server inference may continue. Codes include AI_BUSY, AI_INPUT_INVALID, IMAGE_LIMIT, AI_HTTP_<status>, AI_TIMEOUT_120S, AI_CANCELLED, AI_NO_VALID_*, AI_OUTPUT_INVALID. No automatic model retry or alternative credential. Empty apiKey guard retained pending official runtime auth verification; CI source scan is limited to known patterns and is not a substitute for full GitHub secret scanning. Do not add personal keys or circumvent provider access controls.
+
+## Release gate
+
+On loader-hardening pushes, CI runs source checks, Node tests, Chromium mock QA, then reads every first-party src file plus manifest from jsDelivr @HEAD and compares SHA-256 with checkout. A failure blocks promotion. Requires actual network; no claim of HTTP 200 until log proves it. Existing preview-channel pointer remains unchanged until reviewer checks exact candidate CI/CDN and manual Canvas gate. This gate is not enforced by branch rules yet; direct writes are still possible.
+
+## Security and outstanding decisions
+
+Imported modules, transitive dependencies, and external vision assets share the shell realm and are trusted; Object.freeze(aiBridge) is not a security boundary. SHA pin fixes a version but not trust in a mutable channel controlled by an attacker; localStorage is not a trust anchor. ECDSA signing deferred: needs independent private-key custody, canonical signed schema, key rotation/revocation, and migration. Risk is **OPEN, not accepted** for public commercial release. Repository metadata observed main, preview-channel and release-0.2.0 unprotected; 2FA status unknown. Require owner verification of 2FA, least privilege, reviewed PRs and branch protection/rulesets before commercial distribution. CSP deferred pending Canvas compatibility; needs Gemini transport, raw manifest, CDN module, data/blob images/downloads and MediaPipe WASM/model endpoints. Never impose untested policy on active Canvas. No Blob module imports or nested frames. Model URL aliases and third-party dependencies need further integrity review. License not selected by owner: no invented licensing grant.
+
+Acceptance still open: measured rollback <=10 min, real network interruption during import and measured latency, failing mount -> LKG in actual Canvas, storage-denied host, min/max compatibility on old shell, real AI bridge cross-account, actual vision model load and product quality. No live changes made to stable, preview, or v0.3 branch.

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import vm from "node:vm";
 const html=readFileSync(new URL("../canvas/shell.html",import.meta.url),"utf8");
-const script=html.split("<script>")[1].split("/* BOOTSTRAP */")[0];
+const script=html.split("<script>")[1].split("function mutableManifestURL(")[0];
 const img={mimeType:"image/jpeg",base64:"AAAA"};
 function setup(fetch){
   const ctx=vm.createContext({fetch,performance,AbortController,setTimeout,clearTimeout});
@@ -13,8 +13,8 @@ function setup(fetch){
 function res(parts,status=200){return {ok:status===200,status,json:async()=>({candidates:[{content:{parts}}]})};}
 test("shell manifest supports rollback and candidate, rejects paths",()=>{
   const {validate}=setup(()=>{});
-  for(const shellApi of [1,2])assert.equal(validate({shellApi,version:"0.2.0",release:"0.2.0",entry:"src/app.js"}).shellApi,shellApi);
-  assert.throws(()=>validate({shellApi:2,version:"0.2.0",release:"0.2.0",entry:"../x.js"}));
+  const base={name:"Linggau AI Studio",shellApi:2,version:"0.2.0",commit:"a".repeat(40),entry:"src/app.js"};
+  assert.equal(validate(base).bridgeApi,2);assert.throws(()=>validate({...base,entry:"../x.js"}));
 });
 test("image request sends ordered references and ratio, key stays empty",async()=>{
   let calls=0;const {bridge}=setup(async(url,options)=>{calls++;assert.match(url,/gemini-3.1-flash-image:generateContent\?key=$/);const p=JSON.parse(options.body);assert.equal(p.contents[0].parts[2].inlineData.data,"BBBB");assert.equal(p.generationConfig.imageConfig.aspectRatio,"4:5");return res([{inlineData:{mimeType:img.mimeType,data:img.base64}}]);});
@@ -25,3 +25,5 @@ test("text transport uses text model and excludes thoughts",async()=>{const {bri
 test("401/403/429 no retry, subsequent manual attempt allowed",async()=>{let calls=0;const codes=[401,403,429,200];const {bridge}=setup(async()=>res([{inlineData:{mimeType:img.mimeType,data:img.base64}}],codes[calls++]));for(const c of codes.slice(0,3))await assert.rejects(bridge.editImage({prompt:"test",images:[img]}),new RegExp(String(c)));assert.equal((await bridge.editImage({prompt:"test",images:[img]})).httpStatus,200);assert.equal(calls,4);});
 test("invalid request never sent",async()=>{const {bridge}=setup(async()=>{throw Error("unexpected fetch");});await assert.rejects(bridge.editImage({prompt:"test",images:[]}),/AI_INPUT_INVALID/);await assert.rejects(bridge.generateText({prompt:"test",aspectRatio:"1:1"}),/AI_INPUT_INVALID/);});
 test("output without image fails closed",async()=>{const {bridge}=setup(async()=>res([{text:"no image"}]));await assert.rejects(bridge.editImage({prompt:"test",images:[img]}),/AI_NO_VALID_IMAGE/);});
+
+test("cancelled request never sends data",async()=>{let calls=0;const {bridge}=setup(async()=>{calls++;return res([])});const c=new AbortController();c.abort();await assert.rejects(bridge.generateText({prompt:"test",signal:c.signal}),/AI_CANCELLED/);assert.equal(calls,0);});

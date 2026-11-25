@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Linggau AI Studio</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath fill='%23202020' d='M3 24 13 5h6l-6 12 9-8h5v17h-5V15L12 26H3z'/%3E%3Crect x='23' y='2' width='5' height='5' fill='%23ff8c00'/%3E%3C/svg%3E">
 <style>body{margin:0;background:#f7f7f4;color:#202321;font:15px/1.5 system-ui,sans-serif}#app{min-height:100vh}.boot{max-width:460px;margin:32px auto;padding:20px;overflow-wrap:anywhere}button{font:inherit;min-height:44px;cursor:pointer}</style>
 </head>
 <body>
@@ -20,6 +21,7 @@ const RATIOS = ["1:1","4:5","3:4","4:3","9:16","16:9"];
 const MAX_IMAGE = 8*1024*1024, MAX_TOTAL = 12*1024*1024;
 let inFlight = false;
 let stage = "INIT";
+let lifecycle = null;
 
 function bytes(image) {
   const b = image?.base64;
@@ -43,10 +45,15 @@ function prepare(kind, req) {
 
 async function request(kind, req) {
   if(inFlight)throw Error("AI_BUSY");
+  if(req?.signal!==undefined&&(!req.signal||typeof req.signal.addEventListener!=="function"||typeof req.signal.removeEventListener!=="function"||typeof req.signal.aborted!=="boolean"))throw Error("AI_INPUT_INVALID");
+  if(req?.signal?.aborted||lifecycle?.signal.aborted)throw Error("AI_CANCELLED");
   const {model,payload}=prepare(kind,req);
   inFlight=true;
   const controller=new AbortController(), start=performance.now();
-  const timer=setTimeout(()=>controller.abort(),120000);
+  const signals=[lifecycle?.signal,req?.signal].filter(Boolean);
+  const cancel=()=>controller.abort();let timedOut=false;
+  for(const signal of signals){if(signal.aborted)cancel();else signal.addEventListener("abort",cancel,{once:true});}
+  const timer=setTimeout(()=>{timedOut=true;controller.abort();},120000);
   try{
     // Empty key only in the Gemini Canvas context. No alternate credential or fallback.
     const endpoint="https://generativelanguage.googleapis.com/v1beta/models/"+model+":generateContent?key="+apiKey;
@@ -67,9 +74,9 @@ async function request(kind, req) {
     if(bytes(image)>MAX_IMAGE)throw Error("AI_OUTPUT_INVALID");
     return {kind:"image",...image,...meta};
   }catch(e){
-    if(controller.signal.aborted)throw Error("AI_TIMEOUT_120S");
+    if(controller.signal.aborted)throw Error(timedOut?"AI_TIMEOUT_120S":"AI_CANCELLED");
     throw e;
-  }finally{clearTimeout(timer);inFlight=false;}
+  }finally{clearTimeout(timer);for(const signal of signals)signal.removeEventListener("abort",cancel);inFlight=false;}
 }
 
 const aiBridge=Object.freeze({
@@ -79,81 +86,150 @@ const aiBridge=Object.freeze({
   generateText:req=>request("text",req)
 });
 
-function validateManifest(m) {
-  const semver=/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-  if(!m||![1,2].includes(m.shellApi)||m.entry!=="src/app.js"||typeof m.version!=="string"||m.version.length>64||!semver.test(m.version)||m.release!==m.version)throw Error("MANIFEST_INCOMPATIBLE");
-  return m;
-}
-
-/* BOOTSTRAP */
-const KNOWN_GOOD_PREVIEW = "1340f044b4f16355b70829fca267d920eb38618d";
-function validateChannel(m){
-  if(!m||m.shellApi!==2||m.entry!=="src/app.js"||typeof m.commit!=="string"||!/^[0-9a-f]{40}$/.test(m.commit)||typeof m.version!=="string"||!/^0\.\d+\.\d+$/.test(m.version))throw Error("CHANNEL_MANIFEST_INVALID");
-  return m;
+// Loader v2.1: accepts old schema during migration; all executable URLs use a full SHA.
+const SHELL_API=2;
+const LEGACY_STABLE="973894e854a65ad69aca0e99a43de2fb9d0a073c";
+const SHA=/^[0-9a-f]{40}$/;
+const VERSION=/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+const STORAGE_PREFIX="linggau-loader-v2:lkg:";
+function validateManifest(m,ref=""){
+  if(!m||m.name!=="Linggau AI Studio"||m.entry!=="src/app.js"||typeof m.version!=="string"||m.version.length>32||!VERSION.test(m.version))throw Error("MANIFEST_INVALID");
+  const min=m.minShellApi??m.shellApi,max=m.maxShellApi??m.shellApi,bridgeApi=m.bridgeApi??m.shellApi;
+  if(!Number.isInteger(min)||!Number.isInteger(max)||min<1||max<min||max>100||![1,2].includes(bridgeApi))throw Error("MANIFEST_INVALID");
+  // The foundation release is read-only; shell API 2 can display that legacy module.
+  if(!(min<=SHELL_API&&SHELL_API<=max)&&!(min===1&&max===1&&bridgeApi===1))throw Error("SHELL_UPDATE_REQUIRED");
+  if(ref&&!SHA.test(ref))throw Error("MANIFEST_INVALID");
+  if(m.commit!==undefined&&!SHA.test(m.commit))throw Error("MANIFEST_INVALID");
+  if(ref&&m.commit&&m.commit!==ref)throw Error("MANIFEST_INVALID");
+  const commit=ref||m.commit||(m.version==="0.1.0"&&m.release==="0.1.0"&&bridgeApi===1?LEGACY_STABLE:"");
+  if(!SHA.test(commit))throw Error("MANIFEST_INVALID");
+  if(m.releasedAt!==undefined&&(typeof m.releasedAt!=="string"||!Number.isFinite(Date.parse(m.releasedAt))))throw Error("MANIFEST_INVALID");
+  return {name:m.name,version:m.version,entry:m.entry,commit,minShellApi:min,maxShellApi:max,bridgeApi,...(m.releasedAt?{releasedAt:m.releasedAt}:{})};
 }
 function mutableManifestURL(channel){
   const root="https://raw.githubusercontent.com/cuan74468-ux/linggau-ai-wrapper/";
   if(channel==="preview")return root+"preview-channel/channel.json";
   if(channel==="stable")return root+"main/manifest.json";
-  throw Error("CHANNEL_INVALID");
+  throw Error("SHELL_CONFIG_INVALID");
 }
-function deadline(promise, ms, code) {
-  let timer;
-  return Promise.race([promise,new Promise((_,reject)=>{
-    timer=setTimeout(()=>reject(Error(code)),ms);
-  })]).finally(()=>clearTimeout(timer));
+function deadline(promise,ms,code){
+  let timer;return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error(code)),ms);})]).finally(()=>clearTimeout(timer));
 }
-
+function readLKG(channel,storage){
+  try{const s=storage??window.localStorage;const raw=s.getItem(STORAGE_PREFIX+channel);return raw?validateManifest(JSON.parse(raw)):null;}catch{return null;}
+}
+function saveLKG(channel,manifest,storage){
+  try{const s=storage??window.localStorage;s.setItem(STORAGE_PREFIX+channel,JSON.stringify(validateManifest(manifest)));return true;}catch{return false;}
+}
+async function boundedFetch(url,ms,code,consume){
+  const ctl=new AbortController();
+  try{
+    return await deadline((async()=>{
+      let res;try{res=await fetch(url,{cache:"no-store",credentials:"omit",redirect:"error",signal:ctl.signal});}catch{throw Error(code+"_NETWORK");}
+      if(!res.ok)throw Error(code+"_HTTP_"+res.status);
+      return consume(res);
+    })(),ms,code+"_TIMEOUT");
+  }finally{ctl.abort();}
+}
+function safeCode(error){
+  const m=String(error?.message||"");return /^[A-Z][A-Z0-9_]{2,79}$/.test(m)?m:"UNEXPECTED_ERROR";
+}
+function userMessage(code,phase){
+  if(code==="SHELL_UPDATE_REQUIRED")return "Versi aplikasi memerlukan pembaruan cangkang. Hubungi pengelola.";
+  if(code==="SHELL_CONFIG_INVALID")return "Konfigurasi aplikasi belum sesuai. Hubungi pengelola.";
+  if(code.startsWith("MANIFEST"))return "Informasi versi belum dapat dimuat. Periksa jaringan dan coba lagi.";
+  if(code.startsWith("PREFLIGHT")||code.startsWith("MODULE")||phase==="MODULE")return "Komponen aplikasi belum dapat dimuat. Periksa jaringan dan coba lagi.";
+  if(code.startsWith("MOUNT")||phase==="MOUNT")return "Antarmuka belum dapat disiapkan. Coba buka kembali aplikasi.";
+  return "Terjadi gangguan pada aplikasi. Coba lagi.";
+}
+function logFailure(phase,error,revision=""){
+  const code=safeCode(error);console.error("LINGGAU_LOADER",phase,code,revision);return {phase,code,revision};
+}
+let mounted=null,booting=false;
+function teardown(){
+  lifecycle?.abort();lifecycle=null;
+  try{mounted?.unmount?.();}catch(e){logFailure("UNMOUNT",e);}
+  mounted=null;
+}
+function failureScreen(root,diagnostic){
+  root.setAttribute("aria-busy","false");
+  const section=document.createElement("section");section.className="boot";
+  const title=document.createElement("h1");title.textContent="Aplikasi belum siap";
+  const msg=document.createElement("p");msg.setAttribute("role","alert");msg.textContent=userMessage(diagnostic.code,diagnostic.phase);
+  const retry=document.createElement("button");retry.textContent="Coba lagi";retry.onclick=()=>location.reload();
+  const copy=document.createElement("button");copy.textContent="Salin detail";
+  copy.onclick=async()=>{
+    const detail=JSON.stringify(diagnostic,null,2);
+    try{await navigator.clipboard.writeText(detail);copy.textContent="Detail disalin";}catch{
+      const field=document.createElement("textarea");field.readOnly=true;field.value=detail;field.setAttribute("aria-label","Detail teknis untuk disalin");section.append(field);field.select();
+    }
+  };
+  section.append(title,msg,retry,copy);root.replaceChildren(section);
+}
+async function loadCandidate(root,manifest,message){
+  const url=CDN+"@"+manifest.commit+"/"+manifest.entry;
+  stage="PREFLIGHT";message.textContent="Memeriksa komponen aplikasi…";
+  await boundedFetch(url,10000,"PREFLIGHT",async res=>{
+    const type=res.headers?.get("content-type")||"";
+    if(type&&!/javascript|ecmascript/i.test(type))throw Error("PREFLIGHT_TYPE");
+    // Consume response so abort does not leave the preflight connection in flight.
+    const body=await res.arrayBuffer();if(!body.byteLength||body.byteLength>2*1024*1024)throw Error("PREFLIGHT_SIZE");
+  });
+  stage="MODULE";message.textContent="Memuat aplikasi…";
+  // The deadline cannot cancel native import evaluation. Only reviewed modules are trusted.
+  const app=await deadline(import(url),20000,"MODULE_TIMEOUT_20S");
+  if(typeof app.mount!=="function")throw Error("MOUNT_MISSING");
+  stage="MOUNT";message.textContent="Menyiapkan antarmuka…";
+  lifecycle=new AbortController();const life=lifecycle;
+  const bridge=manifest.bridgeApi===1?Object.freeze({available:false,async editImage(){throw Error("AI_BRIDGE_NOT_CONNECTED");}}):aiBridge;
+  const staging=document.createElement("div");
+  const attempt=Promise.resolve().then(()=>app.mount({root:staging,ai:bridge,version:manifest.version,revision:manifest.commit,signal:life.signal})).then(handle=>{
+    if(life.signal.aborted){try{handle?.unmount?.();}catch(e){logFailure("UNMOUNT",e);}throw Error("MOUNT_CANCELLED");}
+    return handle;
+  });
+  try{mounted=await deadline(attempt,10000,"MOUNT_TIMEOUT_10S");}catch(e){life.abort();throw e;}
+  root.replaceChildren(staging);root.setAttribute("aria-busy","false");
+}
 async function bootstrap(ref=PREVIEW_REF){
-  const root=document.getElementById("app");
-  root.setAttribute("aria-busy","true");
+  if(booting)return;booting=true;teardown();
+  const root=document.getElementById("app");root.setAttribute("aria-busy","true");
   const screen=document.createElement("section");screen.className="boot";
   const title=document.createElement("h1");title.textContent="Linggau AI Studio";
-  const message=document.createElement("p");message.setAttribute("role","status");
-  const detail=document.createElement("small");detail.textContent=ref?"Preview "+ref.slice(0,12):"Kanal "+UPDATE_CHANNEL;
-  screen.append(title,message,detail);root.replaceChildren(screen);
-  function progress(next,text){stage=next;message.textContent=text;}
+  const message=document.createElement("p");message.setAttribute("role","status");message.textContent="Memuat ruang kerja…";
+  screen.append(title,message);root.replaceChildren(screen);
+  let manifest,diagnostic;
   try{
-    if(apiKey!==""||ref&&!/^[0-9a-f]{40}$/.test(ref)||!["preview","stable"].includes(UPDATE_CHANNEL))throw Error("SHELL_CONFIG_INVALID");
-    progress("MANIFEST","Memeriksa manifest versi…");
-    const controller=new AbortController(), timer=setTimeout(()=>controller.abort(),15000);
-    let manifest;
-    try{
-      manifest=await deadline((async()=>{
-        const channel=!ref&&UPDATE_CHANNEL==="preview";
-        const manifestURL=ref?CDN+"@"+ref+"/manifest.json":mutableManifestURL(UPDATE_CHANNEL);
-        const res=await fetch(manifestURL,{cache:"no-store",credentials:"omit",redirect:"error",signal:controller.signal});
-        if(!res.ok)throw Error("MANIFEST_HTTP_"+res.status);
-        return channel?validateChannel(await res.json()):validateManifest(await res.json());
-      })(),15000,"MANIFEST_TIMEOUT_15S");
-    }finally{clearTimeout(timer);controller.abort();}
-    progress("MODULE","Memuat modul dan dependensi CDN…");
-    const selected=ref||manifest.commit||manifest.release;
-    const url=CDN+"@"+selected+"/"+manifest.entry;
-    const app=await deadline(import(url),20000,"MODULE_TIMEOUT_20S");
-    if(typeof app.mount!=="function")throw Error("MOUNT_MISSING");
-    progress("MOUNT","Menyiapkan antarmuka…");
-    const bridge=manifest.shellApi===1?Object.freeze({available:false,async editImage(){throw Error("AI_BRIDGE_NOT_CONNECTED");}}):aiBridge;
-    // Mount in a detached staging root: a timed-out mount cannot overwrite the error or fallback screen.
-    const staging=document.createElement("div");
-    await deadline(Promise.resolve().then(()=>app.mount({root:staging,ai:bridge,version:manifest.version,revision:selected})),10000,"MOUNT_TIMEOUT_10S");
-    root.replaceChildren(staging);
-    root.setAttribute("aria-busy","false");
-    console.info("APP_BOOT_OK",manifest.version,ref?"PREVIEW":"STABLE");
+    stage="INIT";
+    // Do not accept personal API keys or work around host authorization.
+    if(apiKey!==""||(ref&&!SHA.test(ref))||!["preview","stable"].includes(UPDATE_CHANNEL))throw Error("SHELL_CONFIG_INVALID");
+    stage="MANIFEST";message.textContent="Memeriksa versi aplikasi…";
+    const manifestURL=ref?CDN+"@"+ref+"/manifest.json":mutableManifestURL(UPDATE_CHANNEL);
+    manifest=await boundedFetch(manifestURL,15000,"MANIFEST",async res=>{let m;try{m=await res.json();}catch{throw Error("MANIFEST_INVALID");}return validateManifest(m,ref);});
+    await loadCandidate(root,manifest,message);
+    // A mounted candidate, not a merely fetched pointer, becomes last-known-good.
+    if(!ref)saveLKG(UPDATE_CHANNEL,manifest);
+    console.info("LINGGAU_LOADER_READY",manifest.version,manifest.commit);
   }catch(e){
-    root.setAttribute("aria-busy","false");
-    title.textContent="Workspace belum dapat dimuat";
-    message.textContent=stage+": "+String(e?.message||e);
-    message.setAttribute("role","alert");
-    const retry=document.createElement("button");retry.textContent="Coba lagi";retry.onclick=()=>location.reload();
-    screen.append(document.createElement("br"),retry);
-    if((ref||UPDATE_CHANNEL==="preview")&&ref!==KNOWN_GOOD_PREVIEW){
-      const fallback=document.createElement("button");fallback.textContent="Buka workspace sebelumnya";fallback.onclick=()=>bootstrap(KNOWN_GOOD_PREVIEW);screen.append(fallback);
+    diagnostic=logFailure(stage,e,manifest?.commit||"");teardown();
+    const lkg=!ref&&diagnostic.code!=="SHELL_CONFIG_INVALID"?readLKG(UPDATE_CHANNEL):null;
+    if(lkg&&lkg.commit!==manifest?.commit){
+      try{
+        message.textContent="Membuka versi terakhir yang berhasil…";root.replaceChildren(screen);
+        await loadCandidate(root,lkg,message);
+        const notice=document.createElement("p");notice.className="boot";notice.setAttribute("role","status");notice.textContent="Versi terakhir yang berhasil dibuka. Muat ulang nanti untuk memeriksa pembaruan.";
+        root.prepend(notice);return;
+      }catch(f){diagnostic=logFailure(stage,f,lkg.commit);teardown();}
     }
-    root.replaceChildren(screen);
-    console.error("APP_BOOT_FAILED",stage,e);
-  }
+    failureScreen(root,diagnostic);
+  }finally{booting=false;}
 }
+function runtimeFailure(error){
+  if(booting||!lifecycle)return;
+  const root=document.getElementById("app"),diagnostic=logFailure("RUNTIME",error);
+  teardown();failureScreen(root,diagnostic);
+}
+window.addEventListener("error",event=>{if(event.error)runtimeFailure(event.error);});
+window.addEventListener("unhandledrejection",event=>runtimeFailure(event.reason));
 bootstrap();
 </script>
 </body>

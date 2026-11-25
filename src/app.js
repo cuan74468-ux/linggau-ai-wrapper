@@ -38,7 +38,7 @@ function downloadText(asset){
   document.body.append(a);a.click();a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),30000);
 }
-export async function mount({root,ai,version,revision=""}){
+export async function mount({root,ai,version,revision="",signal}){
   if(!(root instanceof HTMLElement))throw new Error("APP_ROOT_INVALID");
   const client=createAIClient(ai), store=createAssetStore(), conversation=createChatSession();
   const css=el("link");css.rel="stylesheet";css.href=new URL("./styles/studio.css",import.meta.url).href;
@@ -59,11 +59,11 @@ export async function mount({root,ai,version,revision=""}){
   const mobileRail=el("div",null,"mobile-rail");mobileRail.setAttribute("aria-label","Geser mendatar untuk memilih alat");
   mobileBar.append(mobileRail);
   studio.append(top,frame,mobileBar);root.replaceChildren(css,studio);
-  let active=false, viewEpoch=0, current=null, slots=[], result=null, page="home";
+  let active=false, disposed=false, viewEpoch=0, current=null, slots=[], result=null, page="home";
   const tell=t=>{global.textContent=t;global.hidden=!t;};
   const compact=window.matchMedia("(max-width: 700px)");
   function setNav(){for(const b of studio.querySelectorAll(".nav button, .nav input, .mobile-bar button"))b.disabled=active;}
-  function change(fn){if(active)return;++viewEpoch;tell("");fn();renderNavigation();view.focus({preventScroll:true});view.scrollIntoView({block:"start"});if(compact.matches){const selected=mobileRail.querySelector("[aria-current=page]");if(selected){const r=mobileRail.getBoundingClientRect(),s=selected.getBoundingClientRect();if(s.left<r.left||s.right>r.right)mobileRail.scrollLeft+=s.left-r.left-(r.width-s.width)/2;}}}
+  function change(fn){if(active||disposed)return;++viewEpoch;tell("");fn();renderNavigation();view.focus({preventScroll:true});view.scrollIntoView({block:"start"});if(compact.matches){const selected=mobileRail.querySelector("[aria-current=page]");if(selected){const r=mobileRail.getBoundingClientRect(),s=selected.getBoundingClientRect();if(s.left<r.left||s.right>r.right)mobileRail.scrollLeft+=s.left-r.left-(r.width-s.width)/2;}}}
   const home=button("Asisten AI",()=>change(chatHome),"nav-main");
   const recent=button("Aset sesi",()=>change(history),"nav-main");
   const clear=button("Bersihkan sesi",()=>{if(active||!window.confirm("Hapus semua aset, percakapan dan input sesi?"))return;change(()=>{store.clear();conversation.clear();slots=[];result=null;current=null;chatHome();tell("Sesi dibersihkan.");});},"nav-main");
@@ -125,9 +125,9 @@ export async function mount({root,ai,version,revision=""}){
     form.addEventListener("submit",async e=>{
       e.preventDefault();if(active||!field.value.trim()||!client.available().textToText)return;
       const input=field.value.trim();active=true;status.textContent="Mengirim satu permintaan…";refreshChat();
-      try{const res=await client.chat(conversation.prompt(input));conversation.append(input,res.text);field.value="";draw();status.textContent="";ready.textContent="Mesin AI · permintaan terakhir berhasil";}
+      try{const res=await client.chat(conversation.prompt(input));if(disposed||signal?.aborted)return;conversation.append(input,res.text);field.value="";draw();status.textContent="";ready.textContent="Mesin AI · permintaan terakhir berhasil";}
       catch(e){status.textContent=friendlyError(e);ready.textContent="Mesin AI · permintaan terakhir gagal";}
-      finally{active=false;refreshChat();if(!compact.matches)field.focus();}
+      finally{active=false;if(!disposed){refreshChat();if(!compact.matches)field.focus();}}
     });
     draw();refreshChat();
   }
@@ -341,7 +341,9 @@ export async function mount({root,ai,version,revision=""}){
         if(localSharpen)res=await sharpenLocal(slots[0],values);
         else if(precision){const plan=backdropPlan({...values,transparent});let valid=false;try{valid=visionMask?!!validateMask(visionMask):useAlpha?alphaAvailable:validPolygon(points);}catch{}if(!valid){if(!autoDetect||!await autoDetect()){output.replaceChildren(el("h2","Objek belum terdeteksi"),el("p","Foto asli tetap aman. Periksa jenis foto atau buka koreksi objek."));showPane("input");return;}}status.textContent="Menyiapkan latar dan mempertahankan objek…";const prepared=await prepareCutout(slots[0],points,useAlpha,visionMask);const generated=plan.color||plan.transparent?null:await client.backdrop(plan.prompt);res=await composeCutout(prepared,plan,generated,shadow&&!transparent);}
         else res=await client.execute(f,{...values},slots);
+        if(disposed||signal?.aborted||epoch!==viewEpoch)return;
         let verified=res;if(res.kind==="image"){const dimensions=await decodeImage(res);verified={...res,width:dimensions.width,height:dimensions.height};}
+        if(disposed||signal?.aborted||epoch!==viewEpoch)return;
         verified={...verified,quality:assessOutput(f,precision?{...values,ratio:"auto"}:values,verified,slots)};
         const jobSources=[...slots], parents=jobSources.filter(x=>x.id).map(x=>x.id);
         const adjust=()=>{if(active)return;showPane("input");const notes=form.querySelector("#param-notes");if(notes){notes.scrollIntoView({block:"center"});notes.focus();}status.textContent="Sesuaikan pengaturan sebelum memproses ulang.";};
@@ -373,4 +375,5 @@ export async function mount({root,ai,version,revision=""}){
     }
   }
   chatHome();renderNavigation();
+  return {unmount(){if(disposed)return;disposed=true;++viewEpoch;store.clear();conversation.clear();slots=[];result=null;current=null;root.replaceChildren();}};
 }

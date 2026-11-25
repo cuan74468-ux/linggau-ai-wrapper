@@ -66,5 +66,8 @@ export function friendlyError(error){
   if(m.includes("AI_NO_VALID")||m.includes("AI_OUTPUT_INVALID")) return "AI tidak mengembalikan hasil yang valid.";
   if(m.includes("PROMPT_LIMIT")) return "Brief terlalu panjang. Ringkas masukan sebelum menjalankan AI.";
   if(m.includes("AI_BUSY")) return "Satu permintaan masih berjalan.";
-  return "Gagal: "+m.slice(0,180);
+  if(m.includes("AI_CANCELLED"))return "Proses dibatalkan.";
+  if(m.includes("AI_INPUT_INVALID")||m.includes("INVALID_PARAMETER"))return "Periksa foto dan pengaturan sebelum memproses.";
+  console.error("LINGGAU_TOOL_ERROR",/^[A-Z][A-Z0-9_]{2,79}$/.test(m)?m:"UNEXPECTED_ERROR");
+  return "Proses belum berhasil. Periksa masukan atau coba lagi." ;
 }

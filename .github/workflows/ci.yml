@@ -1,7 +1,7 @@
 name: Studio CI
 on:
   push:
-    branches: [main, release-0.2.0]
+    branches: [main, release-0.2.0, loader-hardening]
   pull_request:
     branches: [main]
 permissions:
@@ -15,7 +15,22 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Source credential and manifest checks
+        run: node scripts/check-release.mjs
       - run: node --experimental-default-type=module --test tests/*.test.js
 
       - name: Chromium local browser smoke (no provider calls)
         run: node --experimental-default-type=module tests/browser/run.mjs
+
+  immutable-cdn:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/loader-hardening'
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify exact immutable application bytes before promotion
+        run: node scripts/check-release.mjs --cdn

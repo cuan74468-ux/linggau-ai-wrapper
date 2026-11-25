@@ -39,3 +39,6 @@ Each of the 16 tools has two optional preset combinations of existing parameter 
 
 ## Hybrid precision pilot
 See P0 ledger. Local sharpen uses bounded luminance processing, not AI reconstruction. Background and formal photo offer default manual polygon precision mode (source dimensions, solid or generated empty backdrop, PNG). Only opaque, fully selected decoded pixels are copied exactly; transparent/edge pixels are composited. Source photo stays local in precision mode; custom backdrop may be sent to Gemini. No automatic segmentation or face verification. Generative mode remains an explicit alternative, with existing review gate. Local 4 MP / 4096px limits and 8MB output cap fail closed. Browser QA required.
+
+## Loader hardening candidate
+See [loader audit and contract](docs/loader-hardening.md). This branch supersedes old loader instructions only after a separately tested shell migration. No automatic migration of existing Canvas HTML.
