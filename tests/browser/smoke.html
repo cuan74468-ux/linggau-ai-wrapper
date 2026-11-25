@@ -1,0 +1,61 @@
+<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><main id="app"></main>
+<script type="module">
+import {mount} from "../../src/app.js";
+import {prepareCutout,composeCutout,backdropPlan,sharpenLocal} from "../../src/core/local-image.js";
+const assert=(ok,msg)=>{if(!ok)throw Error(msg)};
+const wait=async(fn,msg)=>{for(let i=0;i<160;i++){const v=fn();if(v)return v;await new Promise(r=>setTimeout(r,50));}throw Error("timeout: "+msg);};
+const btn=(root,t)=>[...root.querySelectorAll("button")].find(b=>b.textContent.trim()===t);
+const img=async a=>{const i=new Image();i.src="data:"+a.mimeType+";base64,"+a.base64;await i.decode();return i;};
+const sample=document.createElement("canvas");sample.width=80;sample.height=100;const ctx=sample.getContext("2d");ctx.fillStyle="#934218";ctx.fillRect(20,20,40,60);ctx.fillStyle="#ffffff";ctx.fillRect(25,35,30,18);
+const asset={mimeType:"image/png",base64:sample.toDataURL("image/png").split(",")[1]};
+let calls=0;
+const bridge={available:true,editImage:async()=>{throw Error("unexpected editImage")},generateText:async()=>{throw Error("unexpected generateText")},generateImage:async r=>{assert(r.images.length===0,"source leaked to background generation");calls++;return {...asset,kind:"image",elapsedMs:1};}};
+async function run(){
+ const initial=await prepareCutout(asset,[],true);
+ const transparent=await composeCutout(initial,backdropPlan({transparent:true}));
+ assert(transparent.pixelVerified&&transparent.protectedPixels===2400,"PNG round trip verification");
+ const rendered=await img(transparent);const c=document.createElement("canvas");c.width=80;c.height=100;const p=c.getContext("2d");p.drawImage(rendered,0,0);
+ assert(p.getImageData(0,0,1,1).data[3]===0,"transparent edge");
+ assert(p.getImageData(25,25,1,1).data[0]===147,"original pixel");
+ const sharp=await sharpenLocal(asset,{strength:"Ringan",noise:"Minimal",detail:"Seimbang"});assert(sharp.width===80&&sharp.height===100,"local sharpen dimensions");
+ await mount({root:document.querySelector("#app"),ai:bridge,version:"test",revision:"browser"});
+ await wait(()=>document.querySelector("#studio .mobile-rail"),"mobile nav");
+ const nav=document.querySelector("#studio .mobile-rail");
+ await wait(()=>nav.clientWidth>0&&getComputedStyle(nav).overflowX==="auto","mobile stylesheet ready: "+window.innerWidth);
+ assert(nav.scrollWidth>nav.clientWidth,"scrollable rail: "+nav.scrollWidth+"/"+nav.clientWidth+" viewport "+window.innerWidth);
+ const background=nav.querySelector('[aria-label="Ubah Background"]');assert(background,"background tool");background.click();
+ const input=document.querySelector("#photo-0");
+ const blob=await new Promise(r=>sample.toBlob(r,"image/png"));const transfer=new DataTransfer();transfer.items.add(new File([blob],"synthetic.png",{type:"image/png"}));input.files=transfer.files;input.dispatchEvent(new Event("change",{bubbles:true}));
+ await wait(()=>document.querySelector(".mask-area")?.textContent.includes("Transparansi foto aktif"),"alpha input");
+ const transparentBox=document.querySelector(".precision-option input");transparentBox.click();
+ const process=btn(document,"Proses foto");await wait(()=>!process.disabled,"process enabled");process.click();
+ const accept=await wait(()=>btn(document,"Sesuai, gunakan"),"review");
+ assert(!btn(document,"Unduh gambar"),"unreviewed output cannot download");accept.click();
+ await wait(()=>btn(document,"Unduh gambar"),"accepted result");
+ assert(calls===0,"local export must use zero AI calls");
+ assert(document.documentElement.scrollWidth<=window.innerWidth+1,"360px overflow");
+ nav.querySelector('[aria-label="Foto Produk Profesional"]').click();
+ assert(document.querySelector("#precision-mode").value==="strict","product defaults to precision");
+ assert(document.querySelector("#param-notes").parentElement.hidden,"hidden unsupported notes");
+ assert(document.querySelectorAll(".mobile-item").length===18,"all tools remain accessible");
+ // Opaque input and vision fixture: browser dialogs must not be required.
+ const opaque=document.createElement("canvas");opaque.width=80;opaque.height=100;const o=opaque.getContext("2d");o.fillStyle="#ccc";o.fillRect(0,0,80,100);o.drawImage(sample,0,0);
+ const opaqueBlob=await new Promise(r=>opaque.toBlob(r,"image/png"));const dt=new DataTransfer();dt.items.add(new File([opaqueBlob],"opaque.png",{type:"image/png"}));const fi=document.querySelector("#photo-0");fi.files=dt.files;fi.dispatchEvent(new Event("change",{bubbles:true}));
+ await wait(()=>document.querySelector(".mask-area")?.textContent.includes("Siap deteksi otomatis"),"opaque input ready");
+ assert(!document.querySelector(".precision-correction").open,"advanced corrections collapsed");
+ document.querySelector('input[name="param-background"][value="Putih bersih"]').click();
+ assert(!btn(document,"Proses foto").disabled,"auto detection can start with no manual mask");
+ window.confirm=()=>{throw Error("native dialog not permitted");};
+ btn(document,"Proses foto").click();
+ await wait(()=>btn(document,"Sesuai, gunakan"),"automatic detection and processing");
+ assert(calls===0,"solid background uses no Gemini");
+ btn(document,"Sesuai, gunakan").click();
+ await wait(()=>btn(document,"Unduh gambar"),"auto output accepted");
+ document.querySelector(".precision-correction").open=true;
+ btn(document,"Deteksi objek (AI lokal)").click();
+ await wait(()=>document.querySelector(".input-panel .status").textContent.includes("Model atau WASM"),"mock model failure visible");
+ assert(!btn(document,"Proses foto").disabled,"previous valid mask retained after failed redetection");
+ window.__smoke={ok:true,detail:"PNG round-trip, local sharpen, 360px workspace, alpha upload, review, product mode and automatic opaque input workflow and mocked vision failure feedback passed"};
+}
+run().catch(e=>{window.__smoke={ok:false,detail:(e.stack||String(e))+" | status: "+document.querySelector(".input-panel .status")?.textContent+" | output: "+document.querySelector(".output-panel")?.textContent?.slice(0,400)}});
+</script></body></html>

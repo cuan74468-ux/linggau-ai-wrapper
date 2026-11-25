@@ -1,0 +1,14 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {findFeatures,getFeature} from "../src/core/feature-registry.js";
+import {normalize} from "../src/core/parameters.js";
+import {buildPrompt} from "../src/core/universal-lock.js";
+import {SKILLS,getSkill} from "../src/core/skills.js";
+import {assessOutput} from "../src/core/quality.js";
+test("every registered feature has a distinct professional skill and review rubric",()=>{const all=findFeatures();assert.equal(Object.keys(SKILLS).length,all.length);assert.equal(new Set(all.map(f=>getSkill(f.id).role)).size,all.length);for(const f of all)assert.equal(getSkill(f.id).review.length,3);});
+test("skills and acceptance criteria are compiled into all requests",()=>{for(const f of findFeatures()){const vals=Object.fromEntries(f.fields.filter(x=>x.required).map(x=>[x.id,"contoh"]));const p=buildPrompt(f,normalize(f,vals));assert.ok(p.includes(getSkill(f.id).craft));assert.match(p,/ACCEPTANCE CRITERIA/);}});
+test("restoration intensity is scoped to actual surface damage",()=>{const f=getFeature("restore");assert.match(buildPrompt(f,normalize(f,{strength:"Kuat"})),/severe visible surface damage/);});
+test("try-on skill preserves garment topology without donor identity",()=>{const f=getFeature("virtual-try-on");assert.match(buildPrompt(f,normalize(f)),/garment seams, neckline, sleeve length/);});
+test("local output checks flag wrong aspect ratio and do not alter image",()=>{const f=getFeature("poster");const r={kind:"image",width:1024,height:1024,base64:"AAAA"};const q=assessOutput(f,{ratio:"16:9"},r);assert.equal(q.checks[1].state,"warn");assert.equal(r.base64,"AAAA");assert.equal(assessOutput(f,{ratio:"4:5"},{kind:"image",width:800,height:1000}).checks[1].state,"pass");});
+test("text review flags missing headings but does not rewrite text",()=>{const f=getFeature("seo-caption");const r={kind:"text",text:"JUDUL PRODUK\nTahu"};const q=assessOutput(f,{},r);assert.equal(q.checks[0].state,"pass");assert.equal(q.checks[1].state,"warn");assert.equal(r.text,"JUDUL PRODUK\nTahu");});
+test("unknown parameter semantics fail closed",()=>{const f=getFeature("poster");assert.throws(()=>buildPrompt({...f,fields:[...f.fields,{id:"unknown",label:"unknown"}]},normalize(f,{brief:"a",headline:"b"})),/PARAMETER_RULE_MISSING/);});
