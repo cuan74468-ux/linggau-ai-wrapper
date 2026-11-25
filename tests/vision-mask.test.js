@@ -1,0 +1,8 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {confidenceAlpha,expandMask,brushMask,validateMask,contactBounds} from "../src/core/vision-mask.js";
+import {segmentObject} from "../src/core/vision.js";
+test("confidence alpha retains opaque interior and soft transition",()=>{const m=confidenceAlpha(new Float32Array([0,.5,1]),3,1);assert.deepEqual([...m.alpha],[0,128,255]);assert.deepEqual([...expandMask(m,3,1)].filter((_,i)=>i%4===3),[0,128,255]);});
+test("empty masks rejected; manual brush can correct local pixels",()=>{assert.throws(()=>confidenceAlpha(new Float32Array(4),2,2),/MASK_AREA_INVALID/);const m=confidenceAlpha(new Float32Array([0,0,1,1,0,0,1,1,0]),3,3);brushMask(m,0,0,true);assert.equal(m.alpha[0],255);});
+test("shadow bounds use foreground only and avoid bottom cropped photo",()=>{const s=new Uint8ClampedArray(4*4*4).fill(255),m=new Uint8ClampedArray(s.length);m[(0*4+1)*4+3]=255;m[(0*4+2)*4+3]=255;assert.ok(contactBounds(s,m,4,4));m[(3*4+1)*4+3]=255;assert.equal(contactBounds(s,m,4,4),null);});
+test("adapter uses one local segmentation and closes model with copied foreground confidence",async()=>{let closed=0,calls=0;const m=await segmentObject({width:3,height:1},{x:.5,y:.5},async()=>({FilesetResolver:{forVisionTasks:async()=>({})},InteractiveSegmenter:{createFromOptions:async()=>({segment(c,roi,cb){calls++;cb({confidenceMasks:[{}, {width:3,height:1,getAsFloat32Array:()=>new Float32Array([0,.5,1])}]});},close(){closed++;}})}}));assert.equal(calls,1);assert.equal(closed,1);assert.deepEqual([...m.alpha],[0,128,255]);});

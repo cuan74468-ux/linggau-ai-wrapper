@@ -5,6 +5,7 @@ import { readImage, decodeImage } from "./core/images.js";
 import {assessOutput} from "./core/quality.js";
 import {supportsPrecision,backdropPlan,sharpenLocal,prepareCutout,composeCutout} from "./core/local-image.js";
 import {validPolygon} from "./core/pixels.js";
+import {validateMask,brushMask} from "./core/vision-mask.js";
 import {needsReferenceReview,createReferenceReview} from "./core/reference-review.js";
 import {validatePresets,applyPreset} from "./core/presets.js";
 import {createChatSession,CHAT_MAX_INPUT} from "./core/chat.js";
@@ -177,7 +178,7 @@ export async function mount({root,ai,version,revision=""}){
   function workspace(f,initial=null,initialIndex=0){
     page="tool";current=f;slots=f.slots.map(()=>null);result=null;if(initial)slots[initialIndex]=initial;
     const epoch=viewEpoch;let loading=0;const revisions=f.slots.map(()=>0);const values={};const inputs=[];const radios=new Map();const fieldGroups=new Map();
-    const localSharpen=f.id==="sharpen",precisionSupported=supportsPrecision(f.id);let precision=precisionSupported,points=[],maskSource=undefined,maskCanvas=null,maskImage=null,maskControls=[],useAlpha=false,transparent=false,alphaAvailable=false,drawMode=false;
+    const localSharpen=f.id==="sharpen",precisionSupported=supportsPrecision(f.id);let precision=precisionSupported,points=[],maskSource=undefined,maskCanvas=null,maskImage=null,maskControls=[],useAlpha=false,transparent=false,alphaAvailable=false,drawMode=false,visionMask=null,visionBusy=false,brushMode=0,shadow=false;
     const heading=el("div",null,"tool-heading");heading.append(el("small",f.category),el("h1",f.title),el("p",f.description));view.replaceChildren(heading);
     const layout=el("div",null,"layout"), form=el("section",null,"card input-panel"), output=el("section",null,"card output-panel");
     form.id="studio-input";output.id="studio-output";
@@ -190,10 +191,10 @@ export async function mount({root,ai,version,revision=""}){
     const status=el("p","Siap menerima input.","status");status.setAttribute("role","status");
     const run=button("Proses AI",process,"primary"), retry=button("Coba Lagi",process);retry.hidden=true;
     function refresh(){
-      const disabled=active||loading>0;
+      const disabled=active||loading>0||visionBusy;
       let available=client.available()[{"image-to-image":"imageToImage","text-to-image":"textToImage","text-to-text":"textToText"}[f.engine]];
       if(localSharpen)available=true;
-      if(precision){try{const plan=backdropPlan({...values,transparent});available=!!maskImage&&(useAlpha?alphaAvailable:validPolygon(points))&&(!!plan.color||!!plan.transparent||client.available().textToImage);}catch{available=false;}}
+      if(precision){try{const plan=backdropPlan({...values,transparent});available=!!maskImage&&(visionMask?!!validateMask(visionMask):useAlpha?alphaAvailable:validPolygon(points))&&(!!plan.color||!!plan.transparent||client.available().textToImage);}catch{available=false;}}
       form.classList.toggle("precision-active",precision);
       run.disabled=disabled||slots.some(x=>!x)||f.fields.some(p=>p.required&&(!precision||(!transparent&&p.id==="sceneBrief"))&&!String(values[p.id]||"").trim())||!available;retry.disabled=run.disabled;
       inputs.forEach(x=>x.disabled=disabled);maskControls.forEach(x=>x.disabled=disabled);
@@ -205,44 +206,52 @@ export async function mount({root,ai,version,revision=""}){
     const maskArea=el("div",null,"mask-area");
     if(precisionSupported){
       const modeLabel=el("label","Metode edit");modeLabel.htmlFor="precision-mode";
-      const mode=el("select");mode.id="precision-mode";for(const [v,t] of [["strict","Presisi objek (tandai objek)"],["ai","Edit generatif (wajah dapat berubah)"]]){const o=el("option",t);o.value=v;mode.append(o);}
+      const mode=el("select");mode.id="precision-mode";for(const [v,t] of [["strict","Presisi objek"],["ai","Edit generatif (wajah dapat berubah)"]]){const o=el("option",t);o.value=v;mode.append(o);}
       const explanation=el("small","Mode presisi mempertahankan piksel asli yang ditandai penuh. Rasio dan cahaya objek tetap. Maks. 4 megapiksel.");
       const transparentLabel=el("label",null,"precision-option"),transparentBox=el("input");transparentBox.type="checkbox";transparentLabel.append(transparentBox,el("span","Ekspor objek saja (PNG transparan)"));transparentBox.addEventListener("change",()=>{transparent=transparentBox.checked;refresh();});inputs.push(transparentBox);
-      precisionPanel.append(explanation,maskArea,transparentLabel);
+      const shadowLabel=el("label",null,"precision-option"),shadowBox=el("input");shadowBox.type="checkbox";shadowLabel.append(shadowBox,el("span","Bayangan kontak (objek di atas permukaan)"));shadowBox.addEventListener("change",()=>{shadow=shadowBox.checked;refresh();});inputs.push(shadowBox);
+      transparentBox.addEventListener("change",()=>{shadowLabel.hidden=transparent;});
+      precisionPanel.append(explanation,maskArea,transparentLabel,shadowLabel);
       mode.addEventListener("change",()=>{precision=mode.value==="strict";precisionPanel.hidden=!precision;presetPicker.value="";refresh();});
       form.append(modeLabel,mode);inputs.push(mode);
     }
     function drawMask(){
       if(!maskCanvas||!maskImage)return;const ctx=maskCanvas.getContext("2d");if(!ctx)return;
       const w=maskCanvas.width,h=maskCanvas.height;ctx.clearRect(0,0,w,h);ctx.drawImage(maskImage,0,0,w,h);
+      if(visionMask){const overlay=document.createElement("canvas");overlay.width=visionMask.width;overlay.height=visionMask.height;const oc=overlay.getContext("2d"),data=oc.createImageData(overlay.width,overlay.height);for(let i=0;i<visionMask.alpha.length;i++){data.data[i*4]=180;data.data[i*4+1]=240;data.data[i*4+2]=40;data.data[i*4+3]=Math.round(visionMask.alpha[i]*.35);}oc.putImageData(data,0,0);ctx.drawImage(overlay,0,0,w,h);return;}
       if(useAlpha){return;}
       if(points.length){ctx.beginPath();points.forEach(([x,y],i)=>i?ctx.lineTo(x*w,y*h):ctx.moveTo(x*w,y*h));if(points.length>=3){ctx.closePath();ctx.fillStyle="rgba(200,241,53,.24)";ctx.fill();}ctx.lineWidth=2;ctx.strokeStyle="#c8f135";ctx.stroke();for(const [x,y] of points){ctx.beginPath();ctx.arc(x*w,y*h,3,0,Math.PI*2);ctx.fillStyle="#fff";ctx.fill();ctx.strokeStyle="#111827";ctx.stroke();}}
     }
     function syncMask(){
       if(!precisionSupported||maskSource===slots[0])return;
-      maskSource=slots[0];points=[];useAlpha=false;alphaAvailable=false;drawMode=false;maskImage=null;maskCanvas=null;maskControls=[];maskArea.replaceChildren();
+      maskSource=slots[0];points=[];visionMask=null;brushMode=0;useAlpha=false;alphaAvailable=false;drawMode=false;maskImage=null;maskCanvas=null;maskControls=[];maskArea.replaceChildren();
       if(!maskSource){maskArea.append(el("small","Unggah foto untuk menandai objek."));return;}
       const source=maskSource,canvas=el("canvas",null,"mask-canvas"),img=new Image();maskCanvas=canvas;
       canvas.setAttribute("aria-label","Ketuk titik mengelilingi objek yang ingin dipertahankan");
-      const count=el("small","0 titik");
-      const alphaToggle=button("Pakai transparansi foto",()=>{if(active||!alphaAvailable)return;useAlpha=true;points=[];update();});alphaToggle.hidden=true;
-      const manualToggle=button("Tandai manual",()=>{if(active)return;useAlpha=false;points=[];update();});manualToggle.hidden=true;
+      const count=el("small","Siap deteksi objek");
+      const detect=button("Deteksi objek (AI lokal)",()=>detectAt({x:.5,y:.5}),"primary");
+      const plus=button("Kuas +",()=>setBrush(1)),minus=button("Kuas −",()=>setBrush(-1));plus.hidden=minus.hidden=true;
+      function setBrush(m){brushMode=m;canvas.style.touchAction=m?"none":"manipulation";plus.setAttribute("aria-pressed",String(m===1));minus.setAttribute("aria-pressed",String(m===-1));}
+      let visionConsent=false;
+      async function detectAt(point){if(active||visionBusy||!maskImage||epoch!==viewEpoch)return;if(!visionConsent){if(!window.confirm("Muat model segmentasi MediaPipe dari internet? Foto diproses di perangkat; pustaka dapat mengirim metrik penggunaan. Tidak memakai kuota Gemini."))return;visionConsent=true;}visionBusy=true;count.textContent="Memuat dan mendeteksi objek…";refresh();try{const {segmentObject}=await import("./core/vision.js");const input=document.createElement("canvas");input.width=canvas.width;input.height=canvas.height;input.getContext("2d").drawImage(maskImage,0,0,input.width,input.height);const m=await segmentObject(input,point);if(epoch!==viewEpoch||maskSource!==source)return;visionMask=m;useAlpha=false;points=[];drawMode=false;setBrush(0);update();}catch(e){if(epoch===viewEpoch&&maskSource===source){count.textContent="Deteksi tidak berhasil. Tandai manual atau coba titik lain.";}}finally{visionBusy=false;if(epoch===viewEpoch)refresh();}}
+      const alphaToggle=button("Pakai transparansi foto",()=>{if(active||!alphaAvailable)return;visionMask=null;brushMode=0;useAlpha=true;points=[];update();});alphaToggle.hidden=true;
+      const manualToggle=button("Tandai manual",()=>{if(active)return;visionMask=null;brushMode=0;useAlpha=false;points=[];update();});manualToggle.hidden=true;
       const trace=button("Gambar garis",()=>{if(active)return;drawMode=!drawMode;canvas.style.touchAction=drawMode?"none":"manipulation";trace.textContent=drawMode?"Mode garis aktif":"Gambar garis";trace.setAttribute("aria-pressed",String(drawMode));});trace.setAttribute("aria-pressed","false");
-      const update=()=>{count.textContent=useAlpha?"Transparansi foto aktif":points.length+" titik · "+(validPolygon(points)?"siap diproses":"minimal 3 titik");alphaToggle.hidden=!alphaAvailable||useAlpha;manualToggle.hidden=!useAlpha;trace.hidden=useAlpha;undo.hidden=useAlpha;reset.hidden=useAlpha;drawMask();refresh();};
+      const update=()=>{count.textContent=visionMask?"Mask terdeteksi · periksa dan koreksi":useAlpha?"Transparansi foto aktif":points.length+" titik · "+(validPolygon(points)?"siap diproses":"minimal 3 titik");alphaToggle.hidden=!alphaAvailable||useAlpha;manualToggle.hidden=!useAlpha&&!visionMask;trace.hidden=useAlpha||!!visionMask;undo.hidden=useAlpha||!!visionMask;reset.hidden=useAlpha||!!visionMask;plus.hidden=minus.hidden=!visionMask;drawMask();refresh();};
       img.onload=()=>{if(epoch!==viewEpoch||maskSource!==source||maskCanvas!==canvas)return;const s=Math.min(1,600/Math.max(img.naturalWidth,img.naturalHeight));canvas.width=Math.max(1,Math.round(img.naturalWidth*s));canvas.height=Math.max(1,Math.round(img.naturalHeight*s));maskImage=img;const context=canvas.getContext("2d");if(context){context.drawImage(img,0,0,canvas.width,canvas.height);try{const d=context.getImageData(0,0,canvas.width,canvas.height).data;let clear=false,opaque=false;for(let i=3;i<d.length;i+=4){if(d[i]===0)clear=true;if(d[i]===255)opaque=true;}alphaAvailable=clear&&opaque;useAlpha=alphaAvailable;}catch{alphaAvailable=false;}}update();};
       img.onerror=()=>{if(maskSource===source)count.textContent="Foto tidak dapat dibuka.";};
       img.src="data:"+source.mimeType+";base64,"+source.base64;
       function position(e){const r=canvas.getBoundingClientRect();if(!canvas.clientWidth||!canvas.clientHeight)return null;return [Math.max(0,Math.min(1,(e.clientX-r.left-canvas.clientLeft)/canvas.clientWidth)),Math.max(0,Math.min(1,(e.clientY-r.top-canvas.clientTop)/canvas.clientHeight))];}
       function addPoint(e){if(active||loading||useAlpha||!maskImage||points.length>=300)return;const p=position(e);if(!p)return;const last=points.at(-1);if(last&&Math.hypot(p[0]-last[0],p[1]-last[1])<.004)return;points.push(p);if(!drawing)update();else drawMask();}
       let drawing=false;
-      canvas.addEventListener("click",e=>{if(!drawMode)addPoint(e);});
-      canvas.addEventListener("pointerdown",e=>{if(!drawMode||active||useAlpha)return;e.preventDefault();points=[];drawing=true;canvas.setPointerCapture?.(e.pointerId);addPoint(e);});
-      canvas.addEventListener("pointermove",e=>{if(drawing&&drawMode)addPoint(e);});
+      canvas.addEventListener("click",e=>{if(visionBusy||active)return;if(visionMask){if(!brushMode){const p=position(e);if(p)detectAt({x:p[0],y:p[1]});}return;}if(!drawMode)addPoint(e);});
+      canvas.addEventListener("pointerdown",e=>{if(visionMask&&brushMode&&!active&&!visionBusy){e.preventDefault();drawing=true;canvas.setPointerCapture?.(e.pointerId);const p=position(e);if(p){brushMask(visionMask,p[0],p[1],brushMode===1);drawMask();}return;}if(!drawMode||active||useAlpha)return;e.preventDefault();points=[];drawing=true;canvas.setPointerCapture?.(e.pointerId);addPoint(e);});
+      canvas.addEventListener("pointermove",e=>{if(drawing&&visionMask&&brushMode){const p=position(e);if(p){brushMask(visionMask,p[0],p[1],brushMode===1);drawMask();}}else if(drawing&&drawMode)addPoint(e);});
       canvas.addEventListener("pointerup",()=>{drawing=false;update();});
       canvas.addEventListener("pointercancel",()=>{if(drawing)points=[];drawing=false;update();});
       const undo=button("Urungkan titik",()=>{if(active)return;useAlpha=false;points.pop();update();}),reset=button("Ulangi tanda",()=>{if(active)return;useAlpha=false;points=[];update();});
-      maskControls=[undo,reset,trace,alphaToggle,manualToggle];const actions=el("div",null,"actions");actions.append(undo,reset,trace,alphaToggle,manualToggle);
-      maskArea.append(el("small","Ketuk titik atau aktifkan Gambar garis, lalu ikuti keliling objek. Area hijau dipertahankan. Foto transparan dapat memakai alpha asli."),canvas,count,actions);
+      maskControls=[detect,plus,minus,undo,reset,trace,alphaToggle,manualToggle];const actions=el("div",null,"actions");actions.append(detect,plus,minus,manualToggle,alphaToggle,trace,undo,reset);
+      maskArea.append(el("small","Pilih Deteksi objek untuk objek di tengah. Ketuk objek lain setelah deteksi, atau koreksi dengan Kuas +/−. Alternatif: tandai titik atau gambar garis."),canvas,count,actions);
     }
     f.slots.forEach((name,i)=>{
       const id="photo-"+i, label=el("label",name);label.htmlFor=id;
@@ -295,7 +304,7 @@ export async function mount({root,ai,version,revision=""}){
       try{
         let res;
         if(localSharpen)res=await sharpenLocal(slots[0],values);
-        else if(precision){const plan=backdropPlan({...values,transparent}),prepared=await prepareCutout(slots[0],points,useAlpha);const generated=plan.color||plan.transparent?null:await client.backdrop(plan.prompt);res=await composeCutout(prepared,plan,generated);}
+        else if(precision){const plan=backdropPlan({...values,transparent}),prepared=await prepareCutout(slots[0],points,useAlpha,visionMask);const generated=plan.color||plan.transparent?null:await client.backdrop(plan.prompt);res=await composeCutout(prepared,plan,generated,shadow&&!transparent);}
         else res=await client.execute(f,{...values},slots);
         let verified=res;if(res.kind==="image"){const dimensions=await decodeImage(res);verified={...res,width:dimensions.width,height:dimensions.height};}
         verified={...verified,quality:assessOutput(f,precision?{...values,ratio:"auto"}:values,verified,slots)};
