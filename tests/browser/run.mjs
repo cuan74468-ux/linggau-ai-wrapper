@@ -6,7 +6,7 @@ import {resolve,extname,sep} from "node:path";
 import {setTimeout as delay} from "node:timers/promises";
 const root=process.cwd(), dir=await mkdtemp(resolve(tmpdir(),"studio-smoke-"));
 const types={".html":"text/html",".js":"text/javascript",".mjs":"text/javascript",".css":"text/css",".svg":"image/svg+xml"};
-const server=createServer(async(req,res)=>{try{const path=resolve(root,"."+new URL(req.url,"http://localhost").pathname);if(!path.startsWith(root+sep)||!types[extname(path)]){res.writeHead(404).end();return;}res.writeHead(200,{"Content-Type":types[extname(path)]});res.end(await readFile(path));}catch{res.end();}});
+const server=createServer(async(req,res)=>{try{const path=resolve(root,"."+new URL(req.url,"http://localhost").pathname);if(!path.startsWith(root+sep)||!types[extname(path)]){res.writeHead(404).end();return;}res.writeHead(200,{"Content-Type":types[extname(path)]});res.end(await readFile(path===resolve(root,"src/core/vision.js")?resolve(root,"tests/browser/vision-fixture.js"):path));}catch{res.end();}});
 await new Promise(r=>server.listen(0,"127.0.0.1",r));
 const browser=spawn(process.env.CHROME_BIN||"google-chrome",["--headless=new","--no-sandbox","--disable-dev-shm-usage","--disable-gpu","--no-first-run","--remote-debugging-port=0","--user-data-dir="+dir,"about:blank"],{stdio:"ignore"});
 let ws, spawnError;browser.on("error",e=>{spawnError=e});

@@ -189,12 +189,28 @@ export async function mount({root,ai,version,revision=""}){
     form.append(el("h2",f.slots.length?"1. Foto referensi":"1. Brief & pengaturan"));
     
     const status=el("p","Siap menerima input.","status");status.setAttribute("role","status");
-    const run=button("Proses AI",process,"primary"), retry=button("Coba Lagi",process);retry.hidden=true;
+    const blocker=el("p",null,"process-blocker");blocker.setAttribute("role","status");blocker.id="process-blocker";
+    const run=button("Proses AI",process,"primary"), retry=button("Coba Lagi",process);retry.hidden=true;run.setAttribute("aria-describedby",blocker.id);
     function refresh(){
       const disabled=active||loading>0||visionBusy;
       let available=client.available()[{"image-to-image":"imageToImage","text-to-image":"textToImage","text-to-text":"textToText"}[f.engine]];
       if(localSharpen)available=true;
-      if(precision){try{const plan=backdropPlan({...values,transparent});available=!!maskImage&&(visionMask?!!validateMask(visionMask):useAlpha?alphaAvailable:validPolygon(points))&&(!!plan.color||!!plan.transparent||client.available().textToImage);}catch{available=false;}}
+      let reason="";
+      if(loading>0)reason="Sedang membaca foto…";
+      else if(visionBusy)reason="Sedang mendeteksi objek. Tunggu hasil deteksi.";
+      else if(slots.some(x=>!x))reason="Unggah foto referensi terlebih dahulu.";
+      if(precision){
+        available=false;
+        if(!reason){
+          let maskReady=false;
+          try{maskReady=!!maskImage&&(visionMask?!!validateMask(visionMask):useAlpha?alphaAvailable:validPolygon(points));}catch{}
+          if(!maskReady)reason="Klik Deteksi objek atau tandai objek terlebih dahulu.";
+          else{try{const plan=backdropPlan({...values,transparent});available=!!plan.color||!!plan.transparent||client.available().textToImage;if(!available)reason="Mesin pembuat latar tidak tersedia. Pilih putih, beige, atau PNG transparan.";}catch(e){reason=String(e.message).includes("BACKGROUND_UNCHANGED")?"Pilih latar baru atau PNG transparan.":"Periksa pengaturan latar.";} }
+        }
+      }
+      if(!reason&&f.fields.some(p=>p.required&&(!precision||(!transparent&&p.id==="sceneBrief"))&&!String(values[p.id]||"").trim()))reason="Lengkapi kolom wajib.";
+      if(!reason&&!available&&!active)reason="Mesin AI belum tersedia.";
+      blocker.textContent=active?"":reason;blocker.hidden=!blocker.textContent;
       form.classList.toggle("precision-active",precision);
       run.disabled=disabled||slots.some(x=>!x)||f.fields.some(p=>p.required&&(!precision||(!transparent&&p.id==="sceneBrief"))&&!String(values[p.id]||"").trim())||!available;retry.disabled=run.disabled;
       inputs.forEach(x=>x.disabled=disabled);maskControls.forEach(x=>x.disabled=disabled);
@@ -228,13 +244,29 @@ export async function mount({root,ai,version,revision=""}){
       if(!maskSource){maskArea.append(el("small","Unggah foto untuk menandai objek."));return;}
       const source=maskSource,canvas=el("canvas",null,"mask-canvas"),img=new Image();maskCanvas=canvas;
       canvas.setAttribute("aria-label","Ketuk titik mengelilingi objek yang ingin dipertahankan");
-      const count=el("small","Siap deteksi objek");
+      const count=el("small","Siap deteksi objek");count.setAttribute("role","status");count.setAttribute("aria-live","polite");
       const detect=button("Deteksi objek (AI lokal)",()=>detectAt({x:.5,y:.5}),"primary");
       let pickPoint=false;const pick=button("Pilih titik objek",()=>{if(active||visionBusy)return;pickPoint=true;drawMode=false;setBrush(0);count.textContent="Ketuk bagian tengah objek yang ingin dipertahankan.";});
       const plus=button("Kuas +",()=>setBrush(1)),minus=button("Kuas −",()=>setBrush(-1));plus.hidden=minus.hidden=true;
       function setBrush(m){brushMode=m;canvas.style.touchAction=m?"none":"manipulation";plus.setAttribute("aria-pressed",String(m===1));minus.setAttribute("aria-pressed",String(m===-1));}
-      let visionConsent=false;
-      async function detectAt(point){if(active||visionBusy||!maskImage||epoch!==viewEpoch)return;if(!visionConsent){if(!window.confirm("Muat model segmentasi MediaPipe dari internet? Foto diproses di perangkat; pustaka dapat mengirim metrik penggunaan. Tidak memakai kuota Gemini."))return;visionConsent=true;}visionBusy=true;count.textContent="Memuat dan mendeteksi objek…";refresh();try{const {segmentObject}=await import("./core/vision.js");const input=document.createElement("canvas");input.width=canvas.width;input.height=canvas.height;input.getContext("2d").drawImage(maskImage,0,0,input.width,input.height);const m=await segmentObject(input,point);if(epoch!==viewEpoch||maskSource!==source)return;visionMask=m;useAlpha=false;points=[];drawMode=false;setBrush(0);update();}catch(e){if(epoch===viewEpoch&&maskSource===source){count.textContent="Deteksi tidak berhasil. Tandai manual atau coba titik lain.";}}finally{visionBusy=false;if(epoch===viewEpoch)refresh();}}
+      async function detectAt(point){
+        if(active||visionBusy||!maskImage||epoch!==viewEpoch)return;
+        visionBusy=true;count.textContent="Memuat model dan mendeteksi objek…";status.textContent="Deteksi objek sedang berjalan.";refresh();
+        try{
+          const {segmentObject}=await import("./core/vision.js");
+          const input=document.createElement("canvas");input.width=canvas.width;input.height=canvas.height;input.getContext("2d").drawImage(maskImage,0,0,input.width,input.height);
+          const m=await segmentObject(input,point);
+          if(epoch!==viewEpoch||maskSource!==source)return;
+          visionMask=m;useAlpha=false;points=[];drawMode=false;setBrush(0);update();status.textContent="Objek terdeteksi. Periksa area hijau, lalu proses.";
+        }catch(e){
+          if(epoch===viewEpoch&&maskSource===source){
+            const code=String(e?.message||"");
+            const explanation=code.includes("VISION_TIMEOUT")?"Waktu pemuatan model habis.":code.includes("VISION_BUSY")?"Model masih memuat.":code.includes("MASK_AREA_INVALID")||code.includes("VISION_MASK_UNAVAILABLE")?"Objek belum ditemukan.":code.includes("VISION_LIBRARY_LOAD")?"Pustaka segmentasi tidak dapat dimuat.":code.includes("VISION_MODEL_LOAD")?"Model atau WASM tidak dapat dimuat.":"Deteksi tidak tersedia pada sesi ini.";
+            const message=explanation+(visionMask?" Mask sebelumnya tetap tersedia.":" Gunakan Pilih titik objek atau penandaan manual.");
+            count.textContent=message;status.textContent=message;
+          }
+        }finally{visionBusy=false;if(epoch===viewEpoch)refresh();}
+      }
       const alphaToggle=button("Pakai transparansi foto",()=>{if(active||!alphaAvailable)return;visionMask=null;pickPoint=false;drawMode=false;setBrush(0);useAlpha=true;points=[];update();});alphaToggle.hidden=true;
       const manualToggle=button("Tandai manual",()=>{if(active)return;visionMask=null;pickPoint=false;drawMode=false;setBrush(0);useAlpha=false;points=[];update();});manualToggle.hidden=true;
       const trace=button("Gambar garis",()=>{if(active)return;drawMode=!drawMode;canvas.style.touchAction=drawMode?"none":"manipulation";trace.textContent=drawMode?"Mode garis aktif":"Gambar garis";trace.setAttribute("aria-pressed",String(drawMode));});trace.setAttribute("aria-pressed","false");
@@ -252,7 +284,7 @@ export async function mount({root,ai,version,revision=""}){
       canvas.addEventListener("pointercancel",()=>{if(drawing)points=[];drawing=false;update();});
       const undo=button("Urungkan titik",()=>{if(active)return;useAlpha=false;points.pop();update();}),reset=button("Ulangi tanda",()=>{if(active)return;useAlpha=false;points=[];update();});
       maskControls=[detect,pick,plus,minus,undo,reset,trace,alphaToggle,manualToggle];const actions=el("div",null,"actions");actions.append(detect,pick,plus,minus,manualToggle,alphaToggle,trace,undo,reset);
-      maskArea.append(el("small","Pilih Deteksi objek untuk objek di tengah. Ketuk objek lain setelah deteksi, atau koreksi dengan Kuas +/−. Alternatif: tandai titik atau gambar garis."),canvas,count,actions);
+      maskArea.append(el("small","Pilih Deteksi objek untuk objek di tengah, atau Pilih titik objek untuk menentukan bagian yang diinginkan."),canvas,count,actions,el("small","Dengan menjalankan deteksi, Anda memuat model MediaPipe dari internet. Foto diproses lokal; pustaka dapat mengirim metrik penggunaan. Tanpa kuota Gemini."));
     }
     f.slots.forEach((name,i)=>{
       const id="photo-"+i, label=el("label",name);label.htmlFor=id;
@@ -297,7 +329,7 @@ export async function mount({root,ai,version,revision=""}){
         input.addEventListener("input",()=>{values[field.id]=input.value;refresh();});inputs.push(input);const group=el("div");group.append(label,input);fieldGroups.set(field.id,group);form.append(group);
       }
     }
-    const info=el("details",null,"tool-info");info.append(el("summary","Privasi & informasi"),el("p",localSharpen?"Foto diproses di browser, tanpa dikirim ke Gemini.":precisionSupported?"Mode presisi memproses foto asli di browser; hanya deskripsi latar yang dikirim ke Gemini jika diperlukan. Mode generatif mengirim foto ke Gemini dan dapat mengubah wajah.":"Input dikirim ke Gemini saat diproses. Preservasi visual adalah upaya model, bukan penguncian piksel."));form.append(info,status);
+    const info=el("details",null,"tool-info");info.append(el("summary","Privasi & informasi"),el("p",localSharpen?"Foto diproses di browser, tanpa dikirim ke Gemini.":precisionSupported?"Mode presisi memproses foto asli di browser; hanya deskripsi latar yang dikirim ke Gemini jika diperlukan. Mode generatif mengirim foto ke Gemini dan dapat mengubah wajah.":"Input dikirim ke Gemini saat diproses. Preservasi visual adalah upaya model, bukan penguncian piksel."));form.append(info,status,blocker);
     const actions=el("div",null,"actions");actions.append(run,retry);form.append(actions);output.append(el("h2","Hasil kerja"),el("p","Hasil akan muncul di sini setelah pemrosesan selesai.","empty result-placeholder"));layout.append(form,output);view.append(layout);refresh();
     async function process(){
       if(active||loading||visionBusy||run.disabled||slots.some(x=>!x))return;
