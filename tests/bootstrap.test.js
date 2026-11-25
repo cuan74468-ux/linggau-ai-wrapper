@@ -1,0 +1,12 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+import vm from "node:vm";
+const shell=readFileSync(new URL("../canvas/shell.html",import.meta.url),"utf8");
+const source=shell.slice(shell.indexOf("function deadline("),shell.indexOf("async function bootstrap("));
+const context=vm.createContext({setTimeout,clearTimeout});
+vm.runInContext(source+"\nglobalThis.limit=deadline;",context);
+test("bootstrap watchdog rejects a stalled task",async()=>{await assert.rejects(context.limit(new Promise(()=>{}),5,"MODULE_TIMEOUT"),/MODULE_TIMEOUT/);});
+test("bootstrap watchdog preserves resolution and errors",async()=>{assert.equal(await context.limit(Promise.resolve(42),50,"TIMEOUT"),42);await assert.rejects(context.limit(Promise.reject(Error("network")),50,"TIMEOUT"),/network/);});
+test("bootstrap has bounded manifest, module and mount stages",()=>{for(const code of ["MANIFEST_TIMEOUT_15S","MODULE_TIMEOUT_20S","MOUNT_TIMEOUT_10S"])assert.ok(shell.includes(code));assert.match(shell,/deadline\(import\(url\),20000/);assert.match(shell,/staging\.childNodes/);});
+test("manual fallback is limited to preview and pins the previously tested commit",()=>{assert.match(shell,/KNOWN_GOOD_PREVIEW = "2e08c059376c29343a05a66462848925184849ef"/);assert.match(shell,/if\(ref&&ref!==KNOWN_GOOD_PREVIEW\)/);assert.match(shell,/fallback.onclick=\(\)=>bootstrap\(KNOWN_GOOD_PREVIEW\)/);});

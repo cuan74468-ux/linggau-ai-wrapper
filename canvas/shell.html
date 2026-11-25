@@ -85,37 +85,62 @@ function validateManifest(m) {
 }
 
 /* BOOTSTRAP */
-(async()=>{
+const KNOWN_GOOD_PREVIEW = "2e08c059376c29343a05a66462848925184849ef";
+function deadline(promise, ms, code) {
+  let timer;
+  return Promise.race([promise,new Promise((_,reject)=>{
+    timer=setTimeout(()=>reject(Error(code)),ms);
+  })]).finally(()=>clearTimeout(timer));
+}
+
+async function bootstrap(ref=PREVIEW_REF){
   const root=document.getElementById("app");
+  root.setAttribute("aria-busy","true");
+  const screen=document.createElement("section");screen.className="boot";
+  const title=document.createElement("h1");title.textContent="Linggau AI Studio";
+  const message=document.createElement("p");message.setAttribute("role","status");
+  const detail=document.createElement("small");detail.textContent=ref?"Preview "+ref.slice(0,12):"Rilis aktif";
+  screen.append(title,message,detail);root.replaceChildren(screen);
+  function progress(next,text){stage=next;message.textContent=text;}
   try{
-    if(apiKey!==""||PREVIEW_REF&&!/^[0-9a-f]{40}$/.test(PREVIEW_REF))throw Error("SHELL_CONFIG_INVALID");
-    stage="MANIFEST";
+    if(apiKey!==""||ref&&!/^[0-9a-f]{40}$/.test(ref))throw Error("SHELL_CONFIG_INVALID");
+    progress("MANIFEST","Memeriksa manifest versi…");
     const controller=new AbortController(), timer=setTimeout(()=>controller.abort(),15000);
     let manifest;
     try{
-      const res=await fetch(CDN+"@"+(PREVIEW_REF||"main")+"/manifest.json",{cache:"no-store",credentials:"omit",redirect:"error",signal:controller.signal});
-      if(!res.ok)throw Error("MANIFEST_HTTP_"+res.status);
-      manifest=validateManifest(await res.json());
-    }finally{clearTimeout(timer);}
-    stage="MODULE";
-    const url=CDN+"@"+(PREVIEW_REF||manifest.release)+"/"+manifest.entry;
-    const app=await import(url);
+      manifest=await deadline((async()=>{
+        const res=await fetch(CDN+"@"+(ref||"main")+"/manifest.json",{cache:"no-store",credentials:"omit",redirect:"error",signal:controller.signal});
+        if(!res.ok)throw Error("MANIFEST_HTTP_"+res.status);
+        return validateManifest(await res.json());
+      })(),15000,"MANIFEST_TIMEOUT_15S");
+    }finally{clearTimeout(timer);controller.abort();}
+    progress("MODULE","Memuat modul dan dependensi CDN…");
+    const url=CDN+"@"+(ref||manifest.release)+"/"+manifest.entry;
+    const app=await deadline(import(url),20000,"MODULE_TIMEOUT_20S");
     if(typeof app.mount!=="function")throw Error("MOUNT_MISSING");
-    stage="MOUNT";
-    // v0.1.0 remains a rollback target without an active AI bridge.
+    progress("MOUNT","Menyiapkan antarmuka…");
     const bridge=manifest.shellApi===1?Object.freeze({available:false,async editImage(){throw Error("AI_BRIDGE_NOT_CONNECTED");}}):aiBridge;
-    await app.mount({root,ai:bridge,version:manifest.version});
+    // Mount in a detached staging root: a timed-out mount cannot overwrite the error or fallback screen.
+    const staging=document.createElement("div");
+    await deadline(Promise.resolve().then(()=>app.mount({root:staging,ai:bridge,version:manifest.version})),10000,"MOUNT_TIMEOUT_10S");
+    root.replaceChildren(...staging.childNodes);
     root.setAttribute("aria-busy","false");
-    console.info("APP_BOOT_OK",manifest.version,PREVIEW_REF?"PREVIEW":"STABLE");
+    console.info("APP_BOOT_OK",manifest.version,ref?"PREVIEW":"STABLE");
   }catch(e){
     root.setAttribute("aria-busy","false");
-    const section=document.createElement("section");section.className="boot";
-    const title=document.createElement("h1");title.textContent="Workspace belum dapat dimuat";
-    const message=document.createElement("p");message.textContent=stage+": "+String(e?.message||e);
+    title.textContent="Workspace belum dapat dimuat";
+    message.textContent=stage+": "+String(e?.message||e);
+    message.setAttribute("role","alert");
     const retry=document.createElement("button");retry.textContent="Coba lagi";retry.onclick=()=>location.reload();
-    section.append(title,message,retry);root.replaceChildren(section);
+    screen.append(document.createElement("br"),retry);
+    if(ref&&ref!==KNOWN_GOOD_PREVIEW){
+      const fallback=document.createElement("button");fallback.textContent="Buka workspace sebelumnya";fallback.onclick=()=>bootstrap(KNOWN_GOOD_PREVIEW);screen.append(fallback);
+    }
+    root.replaceChildren(screen);
+    console.error("APP_BOOT_FAILED",stage,e);
   }
-})();
+}
+bootstrap();
 </script>
 </body>
 </html>
