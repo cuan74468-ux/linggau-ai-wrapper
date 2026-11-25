@@ -4,6 +4,7 @@ import { createAssetStore } from "./core/assets.js";
 import { readImage, decodeImage } from "./core/images.js";
 import {getSkill} from "./core/skills.js";
 import {assessOutput} from "./core/quality.js";
+import {createChatSession,CHAT_MAX_INPUT} from "./core/chat.js";
 
 function el(tag,text,cls){const n=document.createElement(tag);if(text!=null)n.textContent=text;if(cls)n.className=cls;return n;}
 function button(text,fn,cls){const n=el("button",text,cls);n.type="button";n.addEventListener("click",fn);return n;}
@@ -35,41 +36,44 @@ function downloadText(asset){
 }
 export async function mount({root,ai,version,revision=""}){
   if(!(root instanceof HTMLElement))throw new Error("APP_ROOT_INVALID");
-  const client=createAIClient(ai), store=createAssetStore();
+  const client=createAIClient(ai), store=createAssetStore(), conversation=createChatSession();
   const css=el("link");css.rel="stylesheet";css.href=new URL("./styles/studio.css",import.meta.url).href;
   const studio=el("section");studio.id="studio";
   const top=el("header",null,"top");
   const brand=el("div",null,"brand");
-  brand.append(el("span","L","brandmark"));
+  const mark=el("img",null,"brandmark");mark.alt="";mark.src=new URL("./assets/linggau-mark.svg",import.meta.url).href;brand.append(mark);
   const identity=el("div");identity.append(el("strong","Linggau AI Studio"),el("small","Workspace kreatif · v"+version+(revision?" · "+revision.slice(0,7):"")));brand.append(identity);
   const ready=el("small",client.available().imageToImage?"Mesin AI tersedia · akses diuji saat proses":"Mesin AI tidak terhubung","bridge-status");
-  const toggle=button("☰  Alat AI",()=>setDrawer(!drawerOpen),"menu-toggle");toggle.setAttribute("aria-controls","studio-sidebar");toggle.setAttribute("aria-expanded","false");
+  const toggle=button("☰",()=>setDrawer(!drawerOpen),"menu-toggle");toggle.setAttribute("aria-label","Buka menu alat AI");toggle.setAttribute("aria-controls","studio-sidebar");toggle.setAttribute("aria-expanded","false");
   top.append(brand,ready,toggle);
   const sidebar=el("aside",null,"sidebar");sidebar.id="studio-sidebar";
   const nav=el("nav",null,"nav");nav.setAttribute("aria-label","Seluruh alat AI");
   const view=el("div",null,"workspace");view.id="studio-workspace";view.setAttribute("role","region");view.setAttribute("aria-label","Area kerja");view.tabIndex=-1;
   const global=el("p",null,"status");global.setAttribute("role","status");global.hidden=true;
   const work=el("div",null,"work");work.append(global,view);
-  const frame=el("div",null,"frame");sidebar.append(nav);frame.append(sidebar,work);
+  const frame=el("div",null,"frame");const drawerClose=button("Tutup menu ×",()=>setDrawer(false),"drawer-close");const backdrop=button("",()=>setDrawer(false),"drawer-backdrop");backdrop.setAttribute("aria-label","Tutup menu");backdrop.tabIndex=-1;sidebar.append(drawerClose,nav);frame.append(sidebar,work,backdrop);
   studio.append(top,frame);root.replaceChildren(css,studio);
   let active=false, viewEpoch=0, current=null, slots=[], query="", category="all", result=null, drawerOpen=false, page="home";
   const tell=t=>{global.textContent=t;global.hidden=!t;};
-  function setDrawer(open){drawerOpen=open;studio.classList.toggle("drawer-open",open);toggle.setAttribute("aria-expanded",String(open));}
-  studio.addEventListener("keydown",e=>{if(e.key==="Escape"&&drawerOpen){setDrawer(false);toggle.focus();}});
+  const compact=window.matchMedia("(max-width: 700px)");
+  function setDrawer(open){drawerOpen=!!open&&compact.matches;studio.classList.toggle("drawer-open",drawerOpen);toggle.setAttribute("aria-expanded",String(drawerOpen));work.inert=drawerOpen;top.inert=drawerOpen;if(drawerOpen){sidebar.setAttribute("role","dialog");sidebar.setAttribute("aria-modal","true");sidebar.setAttribute("aria-label","Menu alat AI");drawerClose.focus();}else{sidebar.removeAttribute("role");sidebar.removeAttribute("aria-modal");sidebar.removeAttribute("aria-label");if(compact.matches&&sidebar.contains(document.activeElement))toggle.focus();}}
+  compact.addEventListener?.("change",()=>setDrawer(false));
+  studio.addEventListener("keydown",e=>{if(e.key==="Escape"&&drawerOpen){setDrawer(false);toggle.focus();}if(drawerOpen&&e.key==="Tab"){const items=[...sidebar.querySelectorAll("button:not(:disabled),input:not(:disabled),summary")].filter(n=>n.getClientRects().length);if(!items.length)return;const first=items[0],last=items.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}});
   function setNav(){for(const b of nav.querySelectorAll("button, input"))b.disabled=active;}
   function change(fn){if(active)return;++viewEpoch;tell("");setDrawer(false);fn();renderNavigation();view.focus({preventScroll:true});view.scrollIntoView({block:"start"});}
-  const home=button("Beranda",()=>change(catalog),"nav-main");
-  const recent=button("Riwayat hasil",()=>change(history),"nav-main");
-  const clear=button("Bersihkan sesi",()=>change(()=>{if(!window.confirm("Hapus semua hasil sesi dan input aktif?"))return;store.clear();slots=[];result=null;current=null;catalog();tell("Riwayat dan input sesi dibersihkan.");}),"nav-main");
+  const home=button("Asisten AI",()=>change(chatHome),"nav-main");
+  const allTools=button("Semua alat",()=>change(catalog),"nav-main");
+  const recent=button("Aset sesi",()=>change(history),"nav-main");
+  const clear=button("Bersihkan sesi",()=>{if(active||!window.confirm("Hapus semua aset, percakapan dan input sesi?"))return;change(()=>{store.clear();conversation.clear();slots=[];result=null;current=null;chatHome();tell("Sesi dibersihkan.");});},"nav-main");
   const sideSearch=el("input");sideSearch.type="search";sideSearch.placeholder="Cari alat AI…";sideSearch.setAttribute("aria-label","Cari alat di sidebar");
   const groups=el("div",null,"nav-groups");
   const opened=new Set([CATEGORIES[0]]);
-  nav.append(home,recent,sideSearch,groups,clear);
+  nav.append(home,allTools,recent,sideSearch,groups,clear);
   sideSearch.addEventListener("input",renderNavigation);
   function renderNavigation(){
     home.setAttribute("aria-current",page==="home"?"page":"false");
     recent.setAttribute("aria-current",page==="history"?"page":"false");
-    recent.textContent="Riwayat hasil ("+store.list().length+")";
+    recent.textContent="Aset sesi ("+store.list().length+")";allTools.setAttribute("aria-current",page==="catalog"?"page":"false");
     groups.replaceChildren();
     const matches=findFeatures(sideSearch.value);
     for(const cat of CATEGORIES){
@@ -84,7 +88,7 @@ export async function mount({root,ai,version,revision=""}){
     setNav();
   }
   function catalog(){
-    page="home";current=null;slots=[];result=null;view.replaceChildren(el("h1","Ruang kerja kreatif"),el("p","Pilih alat dari sidebar atau katalog di bawah. Setiap alat memiliki pengaturan dan hasil tersendiri."));
+    page="catalog";current=null;slots=[];result=null;view.replaceChildren(el("h1","Semua alat"),el("p","Pilih alat khusus sesuai pekerjaan Anda."));
     const search=el("input");search.type="search";search.placeholder="Cari fitur...";search.value=query;search.setAttribute("aria-label","Cari fitur");
     const filter=el("select");filter.setAttribute("aria-label","Kategori");
     for(const c of ["all",...CATEGORIES]){const option=el("option",c==="all"?"Semua kategori":c);option.value=c;filter.append(option);}filter.value=category;
@@ -92,6 +96,40 @@ export async function mount({root,ai,version,revision=""}){
     const grid=el("div",null,"grid");grid.style.marginTop="16px";view.append(grid);
     function render(){grid.replaceChildren();const list=findFeatures(query,category);if(!list.length)grid.append(el("p","Tidak ada fitur yang cocok.","empty"));for(const f of list){const b=button("",()=>change(()=>workspace(f)),"tool");b.append(el("small",f.category),el("strong",f.title),el("small",f.description),el("small",({"image-to-image":"Edit foto","text-to-image":"Buat gambar","text-to-text":"Buat teks"})[f.engine],"engine-label"));grid.append(b);}}
     search.addEventListener("input",()=>{query=search.value;render();});filter.addEventListener("change",()=>{category=filter.value;render();});render();
+  }
+  function chatHome(){
+    page="home";current=null;slots=[];result=null;
+    const panel=el("section",null,"chat-home"), intro=el("div",null,"chat-intro");
+    const big=el("img",null,"chat-logo");big.src=mark.src;big.alt="";
+    intro.append(big,el("h1","Apa yang ingin Anda kerjakan?"),el("p","Tanya, belajar, menulis, merencanakan, atau menyelesaikan pekerjaan sehari-hari."));
+    const bar=el("div",null,"chat-bar");const fresh=button("＋ Chat baru",()=>{if(active)return;if(conversation.list().length&&!window.confirm("Hapus percakapan sesi ini?"))return;conversation.clear();chatHome();},"chat-new");bar.append(el("strong","Asisten AI"),fresh);
+    const messages=el("div",null,"chat-messages");messages.setAttribute("role","log");messages.setAttribute("aria-label","Percakapan");messages.setAttribute("aria-live","polite");
+    const form=el("form",null,"chat-composer");const field=el("textarea");field.rows=3;field.maxLength=CHAT_MAX_INPUT;field.placeholder="Tulis pertanyaan atau pekerjaan Anda…";field.setAttribute("aria-label","Pesan untuk asisten AI");
+    const status=el("p",null,"chat-status");status.setAttribute("role","status");
+    const send=el("button","Kirim ↑","primary");send.type="submit";
+    const foot=el("div",null,"chat-compose-actions");foot.append(el("small","Enter untuk baris baru"),send);
+    form.append(field,foot,status,el("small","Chat sementara · konteks terbatas · tanpa browsing atau akses Gmail/Drive. Jangan kirim data sensitif."));
+    panel.append(bar,intro,messages,form);view.replaceChildren(panel);
+    function draw(){
+      const turns=conversation.list();intro.hidden=turns.length>0;messages.replaceChildren();
+      for(const turn of turns){
+        const u=el("article",null,"chat-user");u.append(el("strong","Anda"),el("p",turn.user,"chat-body"));
+        const a=el("article",null,"chat-assistant");a.append(el("strong","Linggau AI"),el("p",turn.assistant,"chat-body"));
+        const feedback=el("small");feedback.setAttribute("role","status");
+        a.append(button("Salin jawaban",async()=>{let tmp=a.querySelector("textarea");if(!tmp){tmp=el("textarea");tmp.value=turn.assistant;tmp.readOnly=true;tmp.setAttribute("aria-label","Jawaban untuk disalin");a.append(tmp);}try{const mode=await copyResult(tmp);feedback.textContent=mode==="manual"?"Teks dipilih. Gunakan menu Salin.":"Teks disalin.";if(mode!=="manual")tmp.remove();}catch{feedback.textContent="Pilih teks secara manual.";}}, "chat-copy"),feedback);
+        messages.append(u,a);
+      }
+    }
+    function refreshChat(){send.disabled=active||!field.value.trim()||!client.available().textToText;field.disabled=active;fresh.disabled=active;send.textContent=active?"Memproses…":"Kirim ↑";setNav();}
+    field.addEventListener("input",refreshChat);
+    form.addEventListener("submit",async e=>{
+      e.preventDefault();if(active||!field.value.trim()||!client.available().textToText)return;
+      const input=field.value.trim();active=true;status.textContent="Mengirim satu permintaan…";refreshChat();
+      try{const res=await client.chat(conversation.prompt(input));conversation.append(input,res.text);field.value="";draw();status.textContent="";ready.textContent="Mesin AI · permintaan terakhir berhasil";}
+      catch(e){status.textContent=friendlyError(e);ready.textContent="Mesin AI · permintaan terakhir gagal";}
+      finally{active=false;refreshChat();field.focus();}
+    });
+    draw();refreshChat();
   }
   function reuse(asset){
     if(asset.kind!=="image")return;
@@ -134,7 +172,7 @@ export async function mount({root,ai,version,revision=""}){
     }
   }
   function history(){
-    page="history";current=null;slots=[];result=null;view.replaceChildren(el("h1","Riwayat hasil sesi"),el("p","Hanya di memori. Maksimal 10 hasil, dapat berkurang sesuai batas memori. Hilang saat halaman ditutup atau dimuat ulang."));
+    page="history";current=null;slots=[];result=null;view.replaceChildren(el("h1","Aset sesi"),el("p","Pakai kembali foto hasil AI pada alat lain atau unduh. Maksimal 10 aset; hilang saat halaman dimuat ulang. Tidak disimpan ke Gmail atau database."));
     const grid=el("div",null,"grid");view.append(grid);
     for(const a of store.list()){const c=el("article",null,"card");resultCard(a,c);c.append(el("small","Asal aset: "+(a.parents.join(", ")||"input baru")),button("Hapus hasil",()=>change(()=>{store.remove(a.id);history();})));grid.append(c);}
     if(!store.list().length)grid.append(el("p","Belum ada hasil.","empty"));
@@ -144,6 +182,11 @@ export async function mount({root,ai,version,revision=""}){
     const epoch=viewEpoch;let loading=0;const revisions=f.slots.map(()=>0);const values={};const inputs=[];
     const heading=el("div",null,"tool-heading");heading.append(el("small",f.category),el("h1",f.title),el("p",f.description));view.replaceChildren(heading);
     const layout=el("div",null,"layout"), form=el("section",null,"card input-panel"), output=el("section",null,"card output-panel");
+    form.id="studio-input";output.id="studio-output";
+    const tabs=el("div",null,"workspace-tabs");const editTab=button("Pengaturan",()=>showPane("input"),"pane-tab");const resultTab=button("Hasil",()=>showPane("output"),"pane-tab");
+    editTab.setAttribute("aria-controls",form.id);resultTab.setAttribute("aria-controls",output.id);tabs.append(editTab,resultTab);view.append(tabs);
+    function showPane(pane){layout.dataset.pane=pane;editTab.setAttribute("aria-pressed",String(pane==="input"));resultTab.setAttribute("aria-pressed",String(pane==="output"));}
+    showPane("input");
     form.append(el("h2",f.slots.length?"1. Foto referensi":"1. Brief & pengaturan"));
     const guidance=el("details",null,"quality-panel");guidance.append(el("summary","Standar kualitas alat ini"));for(const item of getSkill(f.id).review)guidance.append(el("p","• "+item,"quality-review"));form.append(guidance);
     const status=el("p","Siap menerima input.","status");status.setAttribute("role","status");
@@ -192,15 +235,15 @@ export async function mount({root,ai,version,revision=""}){
         const res=await client.execute(f,{...values},slots);
         let verified=res;if(res.kind==="image"){const dimensions=await decodeImage(res);verified={...res,width:dimensions.width,height:dimensions.height};}
         verified={...verified,quality:assessOutput(f,values,verified)};
-        result=store.add(verified,f.id,slots.filter(x=>x.id).map(x=>x.id));resultCard(result,output);
+        result=store.add(verified,f.id,slots.filter(x=>x.id).map(x=>x.id));resultCard(result,output);showPane("output");if(compact.matches)tabs.scrollIntoView({block:"start"});
         if(res.kind==="image"&&slots.length){
           const compare=el("details",null,"quality-panel");compare.append(el("summary","Bandingkan foto sumber"));slots.forEach((source,i)=>{compare.append(el("small",f.slots[i]),image(source));});output.append(compare);
         }
-        output.append(button("Sesuaikan & buat ulang",()=>{if(active)return;const notes=form.querySelector("#param-notes");if(notes){notes.scrollIntoView({block:"center"});notes.focus();}status.textContent="Sesuaikan parameter atau catatan. Tekan Proses AI untuk satu permintaan baru; hasil sebelumnya tetap di riwayat.";}));
+        output.append(button("Sesuaikan & buat ulang",()=>{if(active)return;showPane("input");const notes=form.querySelector("#param-notes");if(notes){notes.scrollIntoView({block:"center"});notes.focus();}status.textContent="Sesuaikan parameter atau catatan. Tekan Proses AI untuk satu permintaan baru; hasil sebelumnya tetap di riwayat.";}));
         status.textContent=(verified.quality.checks.some(c=>c.state==="warn")?"Hasil perlu diperiksa · ":"Selesai · ")+(res.elapsedMs/1000).toFixed(1)+" detik. Periksa kesesuaian hasil sebelum digunakan.";ready.textContent="Mesin AI · permintaan terakhir berhasil";renderNavigation();
       }catch(e){output.replaceChildren(el("p","Tidak ada hasil yang valid.","empty"));status.textContent=friendlyError(e);ready.textContent="Mesin AI · permintaan terakhir gagal";retry.hidden=false;}
       finally{active=false;refresh();}
     }
   }
-  catalog();renderNavigation();
+  chatHome();renderNavigation();
 }

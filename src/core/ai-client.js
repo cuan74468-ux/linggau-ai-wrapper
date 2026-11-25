@@ -30,7 +30,14 @@ export function createAIClient(bridge) {
       return result;
     }finally{active=false;}
   }
-  return Object.freeze({execute, available:()=>Object.freeze({imageToImage:typeof bridge?.editImage==="function"&&bridge.available!==false,textToImage:typeof bridge?.generateImage==="function"&&bridge.available!==false,textToText:typeof bridge?.generateText==="function"&&bridge.available!==false}),busy:()=>active});
+  async function chat(prompt){
+    if(active)throw Error("AI_BUSY");
+    if(typeof prompt!=="string"||!prompt.trim()||prompt.length>12000)throw Error("PROMPT_LIMIT");
+    if(typeof bridge?.generateText!=="function"||bridge.available===false)throw Error("AI_BRIDGE_NOT_CONNECTED");
+    active=true;
+    try{const result=await bridge.generateText({prompt,images:[]});if(result?.kind!=="text"||typeof result.text!=="string"||!result.text.trim()||result.text.length>40000)throw Error("AI_OUTPUT_INVALID");return result;}finally{active=false;}
+  }
+  return Object.freeze({execute,chat, available:()=>Object.freeze({imageToImage:typeof bridge?.editImage==="function"&&bridge.available!==false,textToImage:typeof bridge?.generateImage==="function"&&bridge.available!==false,textToText:typeof bridge?.generateText==="function"&&bridge.available!==false}),busy:()=>active});
 }
 export function friendlyError(error){
   const m=String(error?.message||error);
