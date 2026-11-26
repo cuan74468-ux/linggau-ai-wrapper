@@ -1,7 +1,7 @@
 // Conservative color heuristic for separated opaque products on a flat backdrop.
 // Not semantic recognition; uncertain cases fall back to the existing model.
 import {validateMask} from "./vision-mask.js";
-export function flatCatalogMask(rgb,w,h){
+export function flatCatalogMask(rgb,w,h,point=null){
  if(!Number.isInteger(w)||!Number.isInteger(h)||w<32||h<32||w*h>360000||!(rgb instanceof Uint8ClampedArray)||rgb.length!==w*h*4)return null;
  const n=w*h,border=[];
  for(let x=0;x<w;x++)border.push(x,(h-1)*w+x);
@@ -18,7 +18,7 @@ export function flatCatalogMask(rgb,w,h){
  if(tail<n*.25||tail>n*.95)return null;
  // Border-connected color removal preserves enclosed label areas, but
  // cannot distinguish a real enclosed hole from a same-color label.
- const seen=background.slice(),alpha=new Uint8ClampedArray(n);let count=0,foreground=0,weak=0;
+ const seen=background.slice(),alpha=new Uint8ClampedArray(n),labels=point?new Uint8Array(n):null;let count=0,foreground=0,weak=0;
  for(let i=0;i<n;i++){
   if(seen[i])continue;
   head=0;tail=1;queue[0]=i;seen[i]=1;let strong=0;
@@ -26,11 +26,18 @@ export function flatCatalogMask(rgb,w,h){
   if(tail<Math.max(16,n*.005)||strong<tail*.65)return null;
   count++;foreground+=tail;if(count>6)return null;
   for(let j=0;j<tail;j++){
-   const k=queue[j];let edge=false;visit(k,v=>{if(background[v])edge=true;});
+   const k=queue[j];if(labels)labels[k]=count;let edge=false;visit(k,v=>{if(background[v])edge=true;});
    if(edge&&diff[k]<48){weak++;alpha[k]=Math.round((diff[k]-16)*255/32);}
    else alpha[k]=255;
   }
  }
  if(count<2||!foreground||weak>foreground*.08)return null;
+ if(point){
+  if(!Number.isFinite(point.x)||!Number.isFinite(point.y)||point.x<0||point.x>1||point.y<0||point.y>1)return null;
+  const i=Math.min(h-1,Math.floor(point.y*h))*w+Math.min(w-1,Math.floor(point.x*w));
+  const target=labels[i];if(!target||alpha[i]<240)return null;
+  for(let j=0;j<n;j++)if(labels[j]!==target)alpha[j]=0;
+  try{return {...validateMask({width:w,height:h,alpha}),engine:"product-flat-selected",components:1};}catch{return null;}
+ }
  return {...validateMask({width:w,height:h,alpha}),engine:"product-flat-catalog",components:count};
 }

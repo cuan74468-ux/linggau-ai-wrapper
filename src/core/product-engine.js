@@ -17,7 +17,7 @@ export async function segmentProduct(canvas,{point=null,segment=segmentObject,sa
  const w=canvas?.width,h=canvas?.height;
  if(!Number.isInteger(w)||!Number.isInteger(h)||w<1||h<1||w*h>360000)throw Error("MASK_INVALID");
  const rgb=canvas.getContext("2d").getImageData(0,0,w,h).data;
- if(!point){const flat=flatCatalogMask(rgb,w,h);if(flat){onStage("Memisahkan produk dari latar polos…");return flat;}}
+ const flat=flatCatalogMask(rgb,w,h,point);if(flat){onStage(point?"Memilih produk yang ditandai…":"Memisahkan produk dari latar polos…");return flat;}
  let seed=point||findObjectSeed(rgb,w,h),prior=null;
  if(!seed){
   onStage("Mencari objek utama…");

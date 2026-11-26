@@ -21,7 +21,7 @@ const notes=[];async function read(src){const i=new Image();i.src=src;await i.de
 function surface(w,h,img){const c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d").drawImage(img,0,0,w,h);return c;}
 function metrics(mask,gt,w,h){if(mask.width!==w||mask.height!==h)throw Error("geometry mismatch");let fg=0,bg=0,miss=0,leak=0,inter=0,union=0;for(let i=0;i<w*h;i++){const a=mask.alpha[i]>=128,t=gt[i*4]>=128;if(t){fg++;if(!a)miss++;}else{bg++;if(a)leak++;}if(t&&a)inter++;if(t||a)union++;}if(!fg||!bg)throw Error("invalid reference");return {iou:inter/union,miss:miss/fg,leak:leak/bg};}
 try{
- let completed=0,auto=0,passed=0,syntheticPassed=0,oraclePassed=0,regionPassed=0,multiPassed=0;
+ let completed=0,auto=0,passed=0,syntheticPassed=0,oraclePassed=0,regionPassed=0,multiPassed=0,selectedPassed=0;
  for(const id of [0,12,64]){
   const image=await read("/matte-fixture/"+id+"/image"),truth=await read("/matte-fixture/"+id+"/mask");
   if(image.naturalWidth!==truth.naturalWidth||image.naturalHeight!==truth.naturalHeight)throw Error("reference geometry");
@@ -75,6 +75,12 @@ try{
   const result=await composeCutout(await prepareCutout({mimeType:"image/png",base64:c.toDataURL("image/png").split(",")[1]},[],false,m),backdropPlan({background:"Putih bersih"}));
   if(result.pixelVerified&&m.engine==="product-flat-catalog"&&m.components===3&&s.iou>=.9&&s.miss<=.05&&s.leak<=.05&&opaque===label)multiPassed=1;
   notes.push("three-product flat catalog "+JSON.stringify(s)+" labelOpaque="+(opaque/label).toFixed(4)+" engine="+m.engine);
+  // Explicit user-style point, separate synthetic target; never an automatic pass.
+  const selected=await segmentProduct(c,{point:{x:230/w,y:140/h}}),target=new Uint8ClampedArray(w*h*4);
+  const [left,top,bw,bh]=boxes[1];for(let yy=top;yy<top+bh;yy++)for(let xx=left;xx<left+bw;xx++)target[4*(yy*w+xx)]=255;
+  const ss=metrics(selected,target,w,h),sr=await composeCutout(await prepareCutout({mimeType:"image/png",base64:c.toDataURL("image/png").split(",")[1]},[],false,selected),backdropPlan({background:"Putih bersih"}));
+  if(sr.pixelVerified&&selected.engine==="product-flat-selected"&&ss.iou>=.9&&ss.miss<=.05&&ss.leak<=.05)selectedPassed=1;
+  notes.push("three-product guided selection "+JSON.stringify(ss)+" engine="+selected.engine);
  }catch(e){notes.push("three-product flat catalog rejected "+e.message);}
  // Separate experimental model comparison. It must not satisfy the actual runtime gate.
  notes.push("annotation-assisted diagnostic threshold="+oraclePassed+"/3 (NOT automatic)");
@@ -102,6 +108,6 @@ try{
  notes.push("BiRefNet pilot threshold="+pilotPassed+"/3");
  }
  // Gate the actual automatic runtime path, not experimental alternatives.
- window.__smoke={ok:passed===3&&syntheticPassed===2&&multiPassed===1,detail:notes.join("; ")+"; automatic="+auto+"/3; exported="+completed+"/3; threshold="+passed+"/3; labeled packs="+syntheticPassed+"/2; three-product catalog="+multiPassed+"/1"};
+ window.__smoke={ok:passed===3&&syntheticPassed===2&&multiPassed===1&&selectedPassed===1,detail:notes.join("; ")+"; automatic="+auto+"/3; exported="+completed+"/3; threshold="+passed+"/3; labeled packs="+syntheticPassed+"/2; three-product catalog="+multiPassed+"/1; guided selection="+selectedPassed+"/1"};
 }catch(e){window.__smoke={ok:false,detail:notes.join("; ")+"; "+(e.stack||String(e))};}
 </script></body></html>
