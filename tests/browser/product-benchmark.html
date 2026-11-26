@@ -2,6 +2,7 @@
 import {segmentProduct} from "../../src/core/product-engine.js";
 import {openProductMatte} from "../../src/core/product-birefnet.js";
 import {interiorSeed} from "../../src/core/product-seed.js";
+import {segmentProductRegion} from "../../src/core/product-region.js";
 import {prepareCutout,composeCutout,backdropPlan} from "../../src/core/local-image.js";
 function visualRow(id,source,truth){
  const section=document.createElement("section"),title=document.createElement("h2"),grid=document.createElement("div");title.textContent="Finegrain row "+id;grid.className="qa-row";section.append(title,grid);document.body.append(section);
@@ -20,7 +21,7 @@ const notes=[];async function read(src){const i=new Image();i.src=src;await i.de
 function surface(w,h,img){const c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d").drawImage(img,0,0,w,h);return c;}
 function metrics(mask,gt,w,h){if(mask.width!==w||mask.height!==h)throw Error("geometry mismatch");let fg=0,bg=0,miss=0,leak=0,inter=0,union=0;for(let i=0;i<w*h;i++){const a=mask.alpha[i]>=128,t=gt[i*4]>=128;if(t){fg++;if(!a)miss++;}else{bg++;if(a)leak++;}if(t&&a)inter++;if(t||a)union++;}if(!fg||!bg)throw Error("invalid reference");return {iou:inter/union,miss:miss/fg,leak:leak/bg};}
 try{
- let completed=0,auto=0,passed=0,syntheticPassed=0,oraclePassed=0;
+ let completed=0,auto=0,passed=0,syntheticPassed=0,oraclePassed=0,regionPassed=0;
  for(const id of [0,12,64]){
   const image=await read("/matte-fixture/"+id+"/image"),truth=await read("/matte-fixture/"+id+"/mask");
   if(image.naturalWidth!==truth.naturalWidth||image.naturalHeight!==truth.naturalHeight)throw Error("reference geometry");
@@ -46,6 +47,12 @@ try{
    if(s.iou>=.9&&s.miss<=.05&&s.leak<=.05)oraclePassed++;
    notes.push("row "+id+" oracle-point "+JSON.stringify(s));
   }catch(e){visual.reject("oracle",e);notes.push("row "+id+" oracle-point rejected "+e.message);}
+  try{
+   let x0=w,y0=h,x1=0,y1=0;for(let i=0;i<w*h;i++)if(referenceAlpha[i]){const x=i%w,y=Math.floor(i/w);x0=Math.min(x0,x);y0=Math.min(y0,y);x1=Math.max(x1,x+1);y1=Math.max(y1,y+1);}
+   const m=await segmentProductRegion(c,{x:x0/w,y:y0/h},{x:x1/w,y:y1/h}),s=metrics(m,g,w,h);
+   if(s.iou>=.9&&s.miss<=.05&&s.leak<=.05)regionPassed++;
+   notes.push("row "+id+" annotation-region "+JSON.stringify(s));
+  }catch(e){notes.push("row "+id+" annotation-region rejected "+e.message);}
  }
  // Separate exact-reference, off-center packaging exercise. Uses a drawn label,
  // not an AI reconstruction, and actual MagicTouch, not a mock.
@@ -60,6 +67,7 @@ try{
  }
  // Separate experimental model comparison. It must not satisfy the actual runtime gate.
  notes.push("annotation-assisted diagnostic threshold="+oraclePassed+"/3 (NOT automatic)");
+ notes.push("annotation-region diagnostic threshold="+regionPassed+"/3 (NOT automatic)");
  if(new URLSearchParams(location.search).has("pilot")){
  let pilotPassed=0,pilot;
  try{

@@ -9,8 +9,10 @@ async function json(url,pages=false){
  const r=await fetch(url,{redirect:"error",signal:AbortSignal.timeout(10000),cache:"no-store",headers:pages?{Origin:"https://gemini.google.com"}:{}});
  if(!r.ok)throw Error("HTTP "+r.status+" "+url);
  if(pages&&!["*","https://gemini.google.com"].includes(r.headers.get("access-control-allow-origin")))throw Error("PAGES_CORS_MISSING "+url);
- if(!(r.headers.get("content-type")||"").includes("json"))throw Error("POINTER_CONTENT_TYPE "+url);
- return r.json();
+ const type=(r.headers.get("content-type")||"").split(";")[0].trim().toLowerCase();
+ if(type!=="application/json"&&!( !pages&&type==="text/plain"))throw Error("POINTER_CONTENT_TYPE "+url);
+ const body=await r.text();if(!body||body.length>16384)throw Error("POINTER_BODY_SIZE "+url);
+ return JSON.parse(body);
 }
 for(let attempt=0;attempt<6;attempt++){
  try{

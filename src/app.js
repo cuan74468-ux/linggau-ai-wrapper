@@ -225,7 +225,7 @@ export async function mount({root,ai,version,revision="",signal}){
   function workspace(f,initial=null,initialIndex=0){
     page="tool";current=f;slots=f.slots.map(()=>null);result=null;
     const epoch=viewEpoch;let loading=0;const revisions=f.slots.map(()=>0);const values={};const inputs=[];const radios=new Map();const fieldGroups=new Map();
-    const localSharpen=f.id==="sharpen",precisionSupported=supportsPrecision(f.id),primaryIds=primaryFieldIds(f);let precision=precisionSupported,points=[],maskSource=undefined,maskCanvas=null,maskImage=null,maskControls=[],useAlpha=false,transparent=false,alphaAvailable=false,drawMode=false,visionMask=null,visionBusy=false,brushMode=0,shadow=false,subjectKind=["background","formal-photo"].includes(f.id)?"person":"object",autoDetect=null;
+    const localSharpen=f.id==="sharpen",precisionSupported=supportsPrecision(f.id),primaryIds=primaryFieldIds(f);let precision=precisionSupported,points=[],maskSource=undefined,maskCanvas=null,maskImage=null,maskControls=[],useAlpha=false,transparent=false,alphaAvailable=false,drawMode=false,visionMask=null,visionBusy=false,brushMode=0,shadow=false,subjectKind=["background","formal-photo"].includes(f.id)?"person":"object",autoDetect=null,regionControl=null;
     const heading=el("div",null,"tool-heading");const back=button("‹ "+f.category,()=>change(()=>categoryView(f.category)),"tool-back");heading.append(back,el("h1",f.title),el("p",f.description));view.replaceChildren(heading);
     const layout=el("div",null,"layout"), form=el("section",null,"card input-panel"), output=el("section",null,"card output-panel");
     form.id="studio-input";output.id="studio-output";
@@ -260,7 +260,7 @@ export async function mount({root,ai,version,revision="",signal}){
       blocker.textContent=active?"":reason;blocker.hidden=!blocker.textContent;
       form.classList.toggle("precision-active",precision);
       run.disabled=disabled||slots.some(x=>!x)||f.fields.some(p=>p.required&&(!precision||(!transparent&&p.id==="sceneBrief"))&&!String(values[p.id]||"").trim())||!available;retry.disabled=run.disabled;
-      inputs.forEach(x=>x.disabled=disabled);maskControls.forEach(x=>x.disabled=disabled);
+      inputs.forEach(x=>x.disabled=disabled);maskControls.forEach(x=>x.disabled=disabled);if(regionControl)regionControl.hidden=subjectKind!=="object";
       if(maskCanvas)maskCanvas.style.pointerEvents=disabled?"none":"auto";
       for(const [id,group] of fieldGroups)group.hidden=(precision&&(transparent||!["background","customBackground","sceneBrief"].includes(id)))||(localSharpen&&id==="notes");
       run.textContent=active?"Sedang memproses…":f.engine==="text-to-text"?"Buat teks":f.engine==="text-to-image"?"Buat gambar":"Proses foto";setNav();
@@ -290,18 +290,19 @@ export async function mount({root,ai,version,revision="",signal}){
     }
     function syncMask(){
       if(!precisionSupported||maskSource===slots[0])return;
-      maskSource=slots[0];autoDetect=null;correction.open=false;points=[];visionMask=null;brushMode=0;useAlpha=false;alphaAvailable=false;drawMode=false;maskImage=null;maskCanvas=null;maskControls=[];maskArea.replaceChildren();
+      maskSource=slots[0];autoDetect=null;regionControl=null;correction.open=false;points=[];visionMask=null;brushMode=0;useAlpha=false;alphaAvailable=false;drawMode=false;maskImage=null;maskCanvas=null;maskControls=[];maskArea.replaceChildren();
       if(!maskSource){maskArea.append(el("small","Unggah foto untuk menandai objek."));return;}
       const source=maskSource,canvas=el("canvas",null,"mask-canvas"),img=new Image();maskCanvas=canvas;
       canvas.setAttribute("aria-label","Ketuk titik mengelilingi objek yang ingin dipertahankan");
       const count=el("small","Siap deteksi objek");count.setAttribute("role","status");count.setAttribute("aria-live","polite");
       const detect=button("Deteksi objek (AI lokal)",()=>detectAt({x:.5,y:.5}),"primary");
-      let pickPoint=false;const pick=button("Pilih titik objek",()=>{if(active||visionBusy)return;pickPoint=true;drawMode=false;setBrush(0);count.textContent="Ketuk bagian tengah objek yang ingin dipertahankan.";});
+      let pickPoint=false,regionPicking=false,regionFirst=null;const pick=button("Pilih titik objek",()=>{if(active||visionBusy)return;regionPicking=false;regionFirst=null;pickPoint=true;drawMode=false;setBrush(0);count.textContent="Ketuk bagian tengah objek yang ingin dipertahankan.";});
+       const region=button("Batasi area produk",()=>{if(active||visionBusy||subjectKind!=="object")return;pickPoint=false;drawMode=false;setBrush(0);regionPicking=true;regionFirst=null;count.textContent="Ketuk satu sudut area produk, lalu sudut yang berseberangan. Beri sedikit ruang di sekitarnya.";});regionControl=region;
       const plus=button("Tambah bagian objek",()=>setBrush(1)),minus=button("Hapus sisa latar",()=>setBrush(-1));plus.hidden=minus.hidden=true;
-      function setBrush(m){brushMode=m;canvas.style.touchAction=m?"none":"manipulation";plus.setAttribute("aria-pressed",String(m===1));minus.setAttribute("aria-pressed",String(m===-1));}
-      async function detectAt(point,automatic=false){
+      function setBrush(m){if(m){regionPicking=false;regionFirst=null;pickPoint=false;}brushMode=m;canvas.style.touchAction=m?"none":"manipulation";plus.setAttribute("aria-pressed",String(m===1));minus.setAttribute("aria-pressed",String(m===-1));}
+      async function detectAt(point,automatic=false,targetRegion=null){
         if((active&&!automatic)||visionBusy||!maskImage||epoch!==viewEpoch)return false;
-        visionBusy=true;count.textContent="Memuat model dan mendeteksi objek…";status.textContent="Memisahkan objek dari latar…";refresh();
+        regionPicking=false;regionFirst=null;pickPoint=false;visionBusy=true;count.textContent="Memuat model dan mendeteksi objek…";status.textContent="Memisahkan objek dari latar…";refresh();
         try{
           const input=document.createElement("canvas");input.width=canvas.width;input.height=canvas.height;input.getContext("2d").drawImage(maskImage,0,0,input.width,input.height);
           let m;
@@ -310,8 +311,8 @@ export async function mount({root,ai,version,revision="",signal}){
               const {segmentPortrait}=await import("./core/portrait-engine.js");
               m=await segmentPortrait(input,{onStage:message=>{if(epoch===viewEpoch&&maskSource===source)status.textContent=message;}});
             }else{
-              const {segmentProduct}=await import("./core/product-engine.js");
-              m=await segmentProduct(input,{point:automatic?null:point});
+              if(targetRegion){const {segmentProductRegion}=await import("./core/product-region.js");m=await segmentProductRegion(input,...targetRegion);}
+              else{const {segmentProduct}=await import("./core/product-engine.js");m=await segmentProduct(input,{point:automatic?null:point,onStage:message=>{if(epoch===viewEpoch&&maskSource===source)status.textContent=message;}});}
             }
           }finally{input.width=input.height=1;}
           validateMask(m);let selected=0;for(const a of m.alpha)if(a>=128)selected++;if(selected/m.alpha.length<.03)throw Error("MASK_TOO_SMALL");
@@ -320,7 +321,7 @@ export async function mount({root,ai,version,revision="",signal}){
         }catch(e){
           if(epoch===viewEpoch&&maskSource===source){
             const code=String(e?.message||"");
-            const explanation=code.includes("VISION_TIMEOUT")?"Waktu pemuatan model habis.":code.includes("VISION_BUSY")?"Model masih memuat.":code.includes("OBJECT_SEED_UNCERTAIN")?"Objek utama belum dapat dipilih otomatis. Buka koreksi dan ketuk objek satu kali.":code.includes("MASK_CLEANUP_UNCERTAIN")?"Tepi objek belum cukup jelas untuk dibersihkan dengan aman.":code.includes("MASK_TOO_SMALL")?"Bagian yang ditemukan terlalu kecil.":code.includes("VISION_MASK_UNAVAILABLE")?"Alat belum mengembalikan area objek yang bisa digunakan.":code.includes("MASK_AREA_INVALID")?"Objek belum dapat dipisahkan dari latar dengan jelas.":code.includes("PORTRAIT_MASK_INVALID")?"Alat potret belum mengembalikan hasil yang lengkap.":code.includes("MASK_INVALID")?"Data pemisahan objek tidak valid.":code.includes("VISION_LIBRARY_LOAD")?"Alat pemisah objek belum bisa dimuat.":code.includes("VISION_MODEL_LOAD")?"Alat pemisah objek belum siap.":code.includes("VISION_MATTE_FAILED")?"Perapian tepi foto belum berhasil pada perangkat ini.":code.includes("VISION_INFERENCE_FAILED")?"Pemisahan objek gagal pada perangkat ini.":"Deteksi tidak tersedia pada sesi ini.";
+            const explanation=code.includes("VISION_TIMEOUT")?"Waktu pemuatan model habis.":code.includes("VISION_BUSY")?"Model masih memuat.":code.includes("OBJECT_SEED_UNCERTAIN")?"Objek utama belum dapat dipilih otomatis. Buka koreksi dan ketuk objek satu kali.":code.includes("MASK_CLEANUP_UNCERTAIN")?"Tepi objek belum cukup jelas untuk dibersihkan dengan aman.":code.includes("OBJECT_REGION_SMALL")?"Area terlalu kecil. Tandai dua sudut yang lebih berjauhan.":code.includes("MASK_TOO_SMALL")?"Bagian yang ditemukan terlalu kecil.":code.includes("VISION_MASK_UNAVAILABLE")?"Alat belum mengembalikan area objek yang bisa digunakan.":code.includes("MASK_AREA_INVALID")?"Objek belum dapat dipisahkan dari latar dengan jelas.":code.includes("PORTRAIT_MASK_INVALID")?"Alat potret belum mengembalikan hasil yang lengkap.":code.includes("MASK_INVALID")?"Data pemisahan objek tidak valid.":code.includes("VISION_LIBRARY_LOAD")?"Alat pemisah objek belum bisa dimuat.":code.includes("VISION_MODEL_LOAD")?"Alat pemisah objek belum siap.":code.includes("VISION_MATTE_FAILED")?"Perapian tepi foto belum berhasil pada perangkat ini.":code.includes("VISION_INFERENCE_FAILED")?"Pemisahan objek gagal pada perangkat ini.":"Deteksi tidak tersedia pada sesi ini.";
             const message=explanation+(visionMask?" Pilihan objek sebelumnya tetap tersedia.":" Coba lagi atau buka koreksi objek.");
             count.textContent=message;status.textContent=message;console.warn("LINGGAU_VISION_FAILED",/^[A-Z][A-Z0-9_]{2,79}$/.test(code)?code:"VISION_UNEXPECTED");advanced.open=true;correction.open=true;
           }
@@ -328,9 +329,9 @@ export async function mount({root,ai,version,revision="",signal}){
         }finally{visionBusy=false;if(epoch===viewEpoch)refresh();}
       }
       autoDetect=()=>detectAt({x:.5,y:.5},true);
-      const alphaToggle=button("Pakai transparansi foto",()=>{if(active||!alphaAvailable)return;visionMask=null;pickPoint=false;drawMode=false;setBrush(0);useAlpha=true;points=[];update();});alphaToggle.hidden=true;
-      const manualToggle=button("Tandai manual",()=>{if(active)return;visionMask=null;pickPoint=false;drawMode=false;setBrush(0);useAlpha=false;points=[];update();});manualToggle.hidden=true;
-      const trace=button("Gambar garis",()=>{if(active)return;drawMode=!drawMode;canvas.style.touchAction=drawMode?"none":"manipulation";trace.textContent=drawMode?"Mode garis aktif":"Gambar garis";trace.setAttribute("aria-pressed",String(drawMode));});trace.setAttribute("aria-pressed","false");
+      const alphaToggle=button("Pakai transparansi foto",()=>{if(active||!alphaAvailable)return;visionMask=null;regionPicking=false;regionFirst=null;pickPoint=false;drawMode=false;setBrush(0);useAlpha=true;points=[];update();});alphaToggle.hidden=true;
+      const manualToggle=button("Tandai manual",()=>{if(active)return;visionMask=null;regionPicking=false;regionFirst=null;pickPoint=false;drawMode=false;setBrush(0);useAlpha=false;points=[];update();});manualToggle.hidden=true;
+      const trace=button("Gambar garis",()=>{if(active)return;regionPicking=false;regionFirst=null;pickPoint=false;drawMode=!drawMode;canvas.style.touchAction=drawMode?"none":"manipulation";trace.textContent=drawMode?"Mode garis aktif":"Gambar garis";trace.setAttribute("aria-pressed",String(drawMode));});trace.setAttribute("aria-pressed","false");
       const update=()=>{count.textContent=visionMask?"Objek terdeteksi · periksa dan koreksi":useAlpha?"Transparansi foto aktif":points.length?points.length+" titik · "+(validPolygon(points)?"siap diproses":"kelilingi seluruh objek"):"Siap deteksi otomatis";alphaToggle.hidden=!alphaAvailable||useAlpha;manualToggle.hidden=!useAlpha&&!visionMask;trace.hidden=useAlpha||!!visionMask;undo.hidden=useAlpha||!!visionMask;reset.hidden=useAlpha||!!visionMask;plus.hidden=minus.hidden=!visionMask;drawMask();refresh();};
       img.onload=()=>{if(epoch!==viewEpoch||maskSource!==source||maskCanvas!==canvas)return;const s=Math.min(1,600/Math.max(img.naturalWidth,img.naturalHeight));canvas.width=Math.max(1,Math.round(img.naturalWidth*s));canvas.height=Math.max(1,Math.round(img.naturalHeight*s));maskImage=img;const context=canvas.getContext("2d");if(context){context.drawImage(img,0,0,canvas.width,canvas.height);try{const d=context.getImageData(0,0,canvas.width,canvas.height).data;let clear=false,opaque=false;for(let i=3;i<d.length;i+=4){if(d[i]===0)clear=true;if(d[i]===255)opaque=true;}alphaAvailable=clear&&opaque;useAlpha=alphaAvailable;}catch{alphaAvailable=false;}}update();};
       img.onerror=()=>{if(maskSource===source)count.textContent="Foto tidak dapat dibuka.";};
@@ -338,13 +339,13 @@ export async function mount({root,ai,version,revision="",signal}){
       function position(e){const r=canvas.getBoundingClientRect();if(!canvas.clientWidth||!canvas.clientHeight)return null;return [Math.max(0,Math.min(1,(e.clientX-r.left-canvas.clientLeft)/canvas.clientWidth)),Math.max(0,Math.min(1,(e.clientY-r.top-canvas.clientTop)/canvas.clientHeight))];}
       function addPoint(e){if(active||loading||useAlpha||!maskImage||points.length>=300)return;const p=position(e);if(!p)return;const last=points.at(-1);if(last&&Math.hypot(p[0]-last[0],p[1]-last[1])<.004)return;points.push(p);if(!drawing)update();else drawMask();}
       let drawing=false;
-      canvas.addEventListener("click",e=>{if(visionBusy||active)return;if(pickPoint){pickPoint=false;const p=position(e);if(p)detectAt({x:p[0],y:p[1]});return;}if(visionMask){if(!brushMode){const p=position(e);if(p)detectAt({x:p[0],y:p[1]});}return;}if(!drawMode)addPoint(e);});
-      canvas.addEventListener("pointerdown",e=>{if(visionMask&&brushMode&&!active&&!visionBusy){e.preventDefault();drawing=true;canvas.setPointerCapture?.(e.pointerId);const p=position(e);if(p){brushMask(visionMask,p[0],p[1],brushMode===1);drawMask();}return;}if(!drawMode||active||useAlpha||visionBusy||pickPoint)return;e.preventDefault();points=[];drawing=true;canvas.setPointerCapture?.(e.pointerId);addPoint(e);});
+      canvas.addEventListener("click",e=>{if(visionBusy||active)return;if(regionPicking){if(subjectKind!=="object"){regionPicking=false;regionFirst=null;return;}const p=position(e);if(!p)return;const corner={x:p[0],y:p[1]};if(!regionFirst){regionFirst=corner;count.textContent="Ketuk sudut yang berseberangan.";return;}const first=regionFirst;regionPicking=false;regionFirst=null;void detectAt(null,false,[first,corner]);return;}if(pickPoint){pickPoint=false;const p=position(e);if(p)detectAt({x:p[0],y:p[1]});return;}if(visionMask){if(!brushMode){const p=position(e);if(p)detectAt({x:p[0],y:p[1]});}return;}if(!drawMode)addPoint(e);});
+      canvas.addEventListener("pointerdown",e=>{if(visionMask&&brushMode&&!active&&!visionBusy){e.preventDefault();drawing=true;canvas.setPointerCapture?.(e.pointerId);const p=position(e);if(p){brushMask(visionMask,p[0],p[1],brushMode===1);drawMask();}return;}if(!drawMode||active||useAlpha||visionBusy||pickPoint||regionPicking)return;e.preventDefault();points=[];drawing=true;canvas.setPointerCapture?.(e.pointerId);addPoint(e);});
       canvas.addEventListener("pointermove",e=>{if(drawing&&visionMask&&brushMode){const p=position(e);if(p){brushMask(visionMask,p[0],p[1],brushMode===1);drawMask();}}else if(drawing&&drawMode)addPoint(e);});
       canvas.addEventListener("pointerup",()=>{drawing=false;update();});
       canvas.addEventListener("pointercancel",()=>{if(drawing)points=[];drawing=false;update();});
       const undo=button("Urungkan titik",()=>{if(active)return;useAlpha=false;points.pop();update();}),reset=button("Ulangi tanda",()=>{if(active)return;useAlpha=false;points=[];update();});
-      maskControls=[detect,pick,plus,minus,undo,reset,trace,alphaToggle,manualToggle];const actions=el("div",null,"actions");actions.append(detect,pick,plus,minus,manualToggle,alphaToggle,trace,undo,reset);
+      maskControls=[detect,pick,region,plus,minus,undo,reset,trace,alphaToggle,manualToggle];const actions=el("div",null,"actions");actions.append(detect,pick,region,plus,minus,manualToggle,alphaToggle,trace,undo,reset);
       maskArea.append(el("small","Gunakan koreksi hanya bila hasil kurang tepat. Untuk penandaan manual, kelilingi seluruh objek, bukan bagian wajah saja."),canvas,count,actions,el("small","Deteksi memuat model MediaPipe dari internet. Foto diproses lokal; pustaka dapat mengirim metrik penggunaan. Tanpa kuota Gemini."));
     }
     f.slots.forEach((name,i)=>{
