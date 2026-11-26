@@ -61,3 +61,6 @@ Mobile bottom rail contains seven registry categories, assistant, search and ses
 
 ## Canvas live incident — 26 November 2026
 Owner reported host error overlay with XNNPACK informational line classified as CONSOLE_ERROR. Graph start and close observed, no valid mask or output confirmed. Scoped adapter reclassifies only the exact known informational stderr line to info, preserves all other console errors and restores the prior console handler. Callback validation errors propagate outside the WASM callback; handled application errors use warning and visible stage-specific messages. The 4MP bound is checked before segmentation for preserve mode. Real Canvas retest required. No change to model/provider or fallback policy.
+
+## Canvas portrait failure after 184ced8
+Owner screenshot confirms host overlay gone, actual foreground detection still failed. Previous adapter assumed confidenceMasks[1] always existed; binary models can return one foreground plane at index 0. Accept only one or two known planes, reject unexpected counts, log count, and surface the exact friendly cause in result panel. Add live Chromium MediaPipe portrait inference and protected PNG round-trip with official public test image (no owner photo, no Gemini call); normal UI fixture remains for deterministic tests. Live Canvas remains separate acceptance.

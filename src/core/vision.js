@@ -29,7 +29,12 @@ export async function segmentObject(canvas,point={x:.5,y:.5},load=()=>import(BAS
   // Copy confidence data inside its lifetime, but never throw across the WASM callback.
   const receive=r=>{
    try{
-    const masks=r?.confidenceMasks,fg=masks?.[1];if(!fg)throw Error("VISION_MASK_UNAVAILABLE");
+    const masks=r?.confidenceMasks,count=masks?.length||0;
+    console.info("LINGGAU_VISION_MASK_CHANNELS",kind,count);
+    // These pinned binary segmentation models can expose a single foreground
+    // probability plane (index 0), or two per-class planes (foreground index 1).
+    const fg=count===1?masks[0]:count===2?masks[1]:null;
+    if(!fg)throw Error("VISION_MASK_UNAVAILABLE");
     result=confidenceAlpha(fg.getAsFloat32Array(),fg.width,fg.height);
    }catch(e){callbackError=e;}
   };

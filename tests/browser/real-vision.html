@@ -1,0 +1,18 @@
+<!doctype html><html lang="id"><meta charset="utf-8"><title>Actual MediaPipe browser test</title><body><script type="module">
+import {segmentPerson} from "../../src/core/vision.js";
+import {prepareCutout,composeCutout,backdropPlan} from "../../src/core/local-image.js";
+const notes=[];const info=console.info;console.info=(...a)=>{if(String(a[0]).startsWith("LINGGAU_"))notes.push(a.join(" "));info(...a);};
+try{
+ const img=new Image();img.src="/vision-portrait.jpg";await img.decode();
+ const scale=Math.min(1,512/Math.max(img.naturalWidth,img.naturalHeight)),c=document.createElement("canvas");
+ c.width=Math.max(1,Math.round(img.naturalWidth*scale));c.height=Math.max(1,Math.round(img.naturalHeight*scale));c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+ const m=await segmentPerson(c);let selected=0;for(const a of m.alpha)if(a>=128)selected++;const ratio=selected/m.alpha.length;
+ if(ratio<.03||ratio>.97)throw Error("Unusable foreground coverage "+ratio);
+ const center=m.alpha[Math.floor(m.height/2)*m.width+Math.floor(m.width/2)];
+ if(center<128)throw Error("Portrait center not selected "+center);
+ const asset={mimeType:"image/png",base64:c.toDataURL("image/png").split(",")[1]};
+ const result=await composeCutout(await prepareCutout(asset,[],false,m),backdropPlan({background:"Putih bersih"}));
+ if(!result.pixelVerified||!result.protectedPixels)throw Error("PNG pixel verification failed");
+ window.__smoke={ok:true,detail:notes.join("; ")+"; foreground="+ratio.toFixed(3)+"; protected="+result.protectedPixels+"; PNG verified"};
+}catch(e){window.__smoke={ok:false,detail:notes.join("; ")+"; "+(e.stack||String(e))};}
+</script></body></html>
