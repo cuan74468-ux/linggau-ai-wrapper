@@ -21,7 +21,7 @@ const notes=[];async function read(src){const i=new Image();i.src=src;await i.de
 function surface(w,h,img){const c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d").drawImage(img,0,0,w,h);return c;}
 function metrics(mask,gt,w,h){if(mask.width!==w||mask.height!==h)throw Error("geometry mismatch");let fg=0,bg=0,miss=0,leak=0,inter=0,union=0;for(let i=0;i<w*h;i++){const a=mask.alpha[i]>=128,t=gt[i*4]>=128;if(t){fg++;if(!a)miss++;}else{bg++;if(a)leak++;}if(t&&a)inter++;if(t||a)union++;}if(!fg||!bg)throw Error("invalid reference");return {iou:inter/union,miss:miss/fg,leak:leak/bg};}
 try{
- let completed=0,auto=0,passed=0,syntheticPassed=0,oraclePassed=0,regionPassed=0;
+ let completed=0,auto=0,passed=0,syntheticPassed=0,oraclePassed=0,regionPassed=0,multiPassed=0;
  for(const id of [0,12,64]){
   const image=await read("/matte-fixture/"+id+"/image"),truth=await read("/matte-fixture/"+id+"/mask");
   if(image.naturalWidth!==truth.naturalWidth||image.naturalHeight!==truth.naturalHeight)throw Error("reference geometry");
@@ -65,6 +65,17 @@ try{
   notes.push("synthetic left="+left+" "+JSON.stringify(score)+" labelOpaque="+(opaque/label).toFixed(4));
   }catch(e){notes.push("synthetic left="+left+" rejected "+e.message);}
  }
+ // Exact-reference three-product opaque catalog test on actual automatic route.
+ try{
+  const w=480,h=320,c=document.createElement("canvas");c.width=w;c.height=h;const x=c.getContext("2d"),g=new Uint8ClampedArray(w*h*4),boxes=[[30,75,90,180],[185,35,95,230],[340,90,100,170]];
+  x.fillStyle="#f5f5f5";x.fillRect(0,0,w,h);
+  for(const [left,top,bw,bh] of boxes){x.fillStyle="#3c6158";x.fillRect(left,top,bw,bh);x.fillStyle="#f5f5f5";x.fillRect(left+8,top+40,bw-16,45);x.fillStyle="#202020";x.font="bold 18px sans-serif";x.fillText("LEN",left+15,top+68);for(let yy=top;yy<top+bh;yy++)for(let xx=left;xx<left+bw;xx++)g[4*(yy*w+xx)]=255;}
+  const m=await segmentProduct(c),s=metrics(m,g,w,h);let label=0,opaque=0;
+  for(const [left,top,bw] of boxes)for(let yy=top+40;yy<top+85;yy++)for(let xx=left+8;xx<left+bw-8;xx++){label++;if(m.alpha[yy*w+xx]===255)opaque++;}
+  const result=await composeCutout(await prepareCutout({mimeType:"image/png",base64:c.toDataURL("image/png").split(",")[1]},[],false,m),backdropPlan({background:"Putih bersih"}));
+  if(result.pixelVerified&&m.engine==="product-flat-catalog"&&m.components===3&&s.iou>=.9&&s.miss<=.05&&s.leak<=.05&&opaque===label)multiPassed=1;
+  notes.push("three-product flat catalog "+JSON.stringify(s)+" labelOpaque="+(opaque/label).toFixed(4)+" engine="+m.engine);
+ }catch(e){notes.push("three-product flat catalog rejected "+e.message);}
  // Separate experimental model comparison. It must not satisfy the actual runtime gate.
  notes.push("annotation-assisted diagnostic threshold="+oraclePassed+"/3 (NOT automatic)");
  notes.push("annotation-region diagnostic threshold="+regionPassed+"/3 (NOT automatic)");
@@ -91,6 +102,6 @@ try{
  notes.push("BiRefNet pilot threshold="+pilotPassed+"/3");
  }
  // Gate the actual automatic runtime path, not experimental alternatives.
- window.__smoke={ok:passed===3&&syntheticPassed===2,detail:notes.join("; ")+"; automatic="+auto+"/3; exported="+completed+"/3; threshold="+passed+"/3; labeled packs="+syntheticPassed+"/2"};
+ window.__smoke={ok:passed===3&&syntheticPassed===2&&multiPassed===1,detail:notes.join("; ")+"; automatic="+auto+"/3; exported="+completed+"/3; threshold="+passed+"/3; labeled packs="+syntheticPassed+"/2; three-product catalog="+multiPassed+"/1"};
 }catch(e){window.__smoke={ok:false,detail:notes.join("; ")+"; "+(e.stack||String(e))};}
 </script></body></html>

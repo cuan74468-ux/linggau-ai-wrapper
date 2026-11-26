@@ -5,6 +5,7 @@ import {validateMask,expandMask} from "./vision-mask.js";
 import {segmentSalient} from "./product-saliency.js";
 import {interiorSeed} from "./product-seed.js";
 import {refineProductEdges} from "./product-edge.js";
+import {flatCatalogMask} from "./product-flat-catalog.js";
 function align(mask,w,h){
  validateMask(mask);
  if(mask.width===w&&mask.height===h)return mask;
@@ -16,6 +17,7 @@ export async function segmentProduct(canvas,{point=null,segment=segmentObject,sa
  const w=canvas?.width,h=canvas?.height;
  if(!Number.isInteger(w)||!Number.isInteger(h)||w<1||h<1||w*h>360000)throw Error("MASK_INVALID");
  const rgb=canvas.getContext("2d").getImageData(0,0,w,h).data;
+ if(!point){const flat=flatCatalogMask(rgb,w,h);if(flat){onStage("Memisahkan produk dari latar polos…");return flat;}}
  let seed=point||findObjectSeed(rgb,w,h),prior=null;
  if(!seed){
   onStage("Mencari objek utama…");
