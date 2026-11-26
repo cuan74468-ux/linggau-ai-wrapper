@@ -1,5 +1,5 @@
 import test from "node:test";import assert from "node:assert/strict";
-import {refineMask,findObjectSeed} from "../src/core/mask-refinement.js";
+import {refineMask,findObjectSeed,uniformInferenceCrop} from "../src/core/mask-refinement.js";
 import {cleanEdgeColors} from "../src/core/pixels.js";
 const rgba=(w,h,fn)=>new Uint8ClampedArray(Array.from({length:w*h},(_,i)=>[...fn(i%w,Math.floor(i/w)),255]).flat());
 test("weak background residue removed while strong foreground touching frame remains",()=>{const w=12,h=12,a=new Uint8ClampedArray(w*h);for(let y=3;y<9;y++)for(let x=0;x<4;x++)a[y*w+x]=255;a[5*w+4]=90;a[5*w+5]=70;const rgb=rgba(w,h,(x,y)=>x<4&&y>=3&&y<9?[20,20,20]:[180,180,180]);const m=refineMask({width:w,height:h,alpha:a},rgb);assert.equal(m.alpha[5*w],255);assert.equal(m.alpha[5*w+4],0);assert.equal(m.alpha[5*w+5],0);assert.equal(a[5*w+4],90);});
@@ -9,3 +9,5 @@ test("automatic seed rejects blank or ambiguous two-object photo",()=>{const w=3
 test("edge decontamination changes partial pixels only and leaves source immutable",()=>{const w=7,h=3,s=rgba(w,h,x=>x<3?[200,20,20]:x===3?[100,20,120]:[0,20,220]),m=new Uint8ClampedArray(s.length);for(let i=0;i<w*h;i++)m[i*4+3]=i%w<3?255:i%w===3?128:0;const o=cleanEdgeColors(s,m,w,h);const i=4*(w+3);assert.ok(o[i]>s[i]);assert.ok(o[i+2]<s[i+2]);for(let k=0;k<w*h;k++)if(m[4*k+3]!==128)assert.deepEqual(o.slice(k*4,k*4+4),s.slice(k*4,k*4+4));assert.equal(s[i],100);});
 
 test("flat border-connected region with known background removes medium-confidence spill without changing strong core",()=>{const w=30,h=20,a=new Uint8ClampedArray(w*h);for(let y=4;y<16;y++)for(let x=2;x<10;x++)a[y*w+x]=255;for(let y=7;y<13;y++)for(let x=10;x<14;x++)a[y*w+x]=190;const rgb=rgba(w,h,(x,y)=>x>=2&&x<10&&y>=4&&y<16?[20,20,20]:[180,180,180]);const m=refineMask({width:w,height:h,alpha:a},rgb);assert.equal(m.alpha[10*w+12],0);assert.equal(m.alpha[10*w+8],255);});
+
+test("uniform side margin is excluded from inference without cropping textured edge-touching subject",()=>{const w=80,h=40;for(const offset of [0,30]){const rgb=rgba(w,h,(x,y)=>x>=offset&&x<offset+50?[20+(x+y)%100,40+y,60]:[208,208,208]);const r=uniformInferenceCrop(rgb,w,h);assert.deepEqual(r,{x:offset,y:0,width:50,height:40});}const textured=rgba(w,h,(x,y)=>[x+y,x*2,y*3]);assert.deepEqual(uniformInferenceCrop(textured,w,h),{x:0,y:0,width:w,height:h});});

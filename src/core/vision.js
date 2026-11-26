@@ -1,5 +1,6 @@
 // Optional lazy-loaded MediaPipe MagicTouch v1. No image upload. User must opt in.
-import {confidenceAlpha,portraitAlpha} from "./vision-mask.js";
+import {confidenceAlpha,portraitAlpha,expandMask,validateMask} from "./vision-mask.js";
+import {uniformInferenceCrop} from "./mask-refinement.js";
 const BASE="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21";
 const MODEL="https://storage.googleapis.com/mediapipe-models/interactive_segmenter/magic_touch/float32/1/magic_touch.tflite";
 const PERSON_MODEL="https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite";
@@ -53,4 +54,21 @@ export async function segmentObject(canvas,point={x:.5,y:.5},load=()=>import(BAS
  }finally{clearTimeout(timer);try{segmenter?.close();}finally{restoreLog();busy=false;}}
 }
 
-export function segmentPerson(canvas,load){return segmentObject(canvas,{x:.5,y:.5},load,"person");}
+export async function segmentPerson(canvas,load){
+ const w=canvas?.width,h=canvas?.height;
+ if(!Number.isInteger(w)||!Number.isInteger(h)||w<1||h<1||w*h>360000)throw Error("MASK_INVALID");
+ // Non-DOM callers (unit adapter tests) follow the original model contract.
+ const ctx=canvas.getContext?.("2d");
+ if(!ctx)return segmentObject(canvas,{x:.5,y:.5},load,"person");
+ const r=uniformInferenceCrop(ctx.getImageData(0,0,w,h).data,w,h);
+ if(r.width===w&&r.height===h)return segmentObject(canvas,{x:.5,y:.5},load,"person");
+ const cropped=document.createElement("canvas");cropped.width=r.width;cropped.height=r.height;
+ cropped.getContext("2d").drawImage(canvas,r.x,r.y,r.width,r.height,0,0,r.width,r.height);
+ try{
+  const m=await segmentObject(cropped,{x:.5,y:.5},load,"person");
+  const full=new Uint8ClampedArray(w*h),a=expandMask(m,r.width,r.height);
+  for(let y=0;y<r.height;y++)for(let x=0;x<r.width;x++)full[(y+r.y)*w+x+r.x]=a[(y*r.width+x)*4+3];
+  console.info("LINGGAU_VISION_INFERENCE_CROP",r.x,r.y,r.width,r.height);
+  return validateMask({...m,width:w,height:h,alpha:full});
+ }finally{cropped.width=cropped.height=1;}
+}

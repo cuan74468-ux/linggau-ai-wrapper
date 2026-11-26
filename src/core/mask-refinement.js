@@ -68,3 +68,24 @@ export function findObjectSeed(rgb,w,h){
  for(const k of best){const x=k%w,y=Math.floor(k/w);if(x===0||x===w-1||y===0||y===h-1||!member[k-1]||!member[k+1]||!member[k-w]||!member[k+w])continue;const s=(x-cx)**2+(y-cy)**2;if(s<score){chosen=k;score=s;}}
  return chosen<0?null:{x:((chosen%w)+.5)/w,y:(Math.floor(chosen/w)+.5)/h};
 }
+
+// Detect only large, nearly constant-color strips. This is an inference crop,
+// not an output crop; textured or nonuniform borders are left untouched.
+export function uniformInferenceCrop(rgb,w,h){
+ checkRGB(rgb,w,h);let left=0,right=w,top=0,bottom=h;
+ if(w<32||h<32)return {x:0,y:0,width:w,height:h};
+ function same(i,ref){return rgb[i*4+3]===255&&Math.max(...ref.map((v,c)=>Math.abs(rgb[i*4+c]-v)))<=3;}
+ function strip(axis,reverse){
+  const span=axis==="x"?w:h, cross=axis==="x"?h:w,first=reverse?span-1:0;
+  const index=(p,q)=>axis==="x"?q*w+p:p*w+q;
+  const i=index(first,Math.floor(cross/2))*4,ref=[rgb[i],rgb[i+1],rgb[i+2]];
+  let count=0;for(let p=first;count<Math.floor(span*.45);p+=reverse?-1:1){
+   let ok=true;for(let q=0;q<cross;q++)if(!same(index(p,q),ref)){ok=false;break;}
+   if(!ok)break;count++;
+  }
+  return count>=Math.max(8,Math.ceil(span*.06))?count:0;
+ }
+ left=strip("x",false);right=w-strip("x",true);top=strip("y",false);bottom=h-strip("y",true);
+ if(right-left<w*.45||bottom-top<h*.45)return {x:0,y:0,width:w,height:h};
+ return {x:left,y:top,width:right-left,height:bottom-top};
+}
