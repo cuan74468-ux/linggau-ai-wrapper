@@ -19,6 +19,23 @@ export function refineMask(mask,rgb){
   }
   seen[j]=1;queue[tail++]=j;removed+=out[j];out[j]=0;
  });}
+ // Flat background often receives spurious medium confidence (e.g. an
+ // off-center portrait next to a plain wall). Require border evidence AND a
+ // connected nearly constant-color region dominated by known background.
+ const border=[];for(let x=0;x<w;x++){border.push(x,(h-1)*w+x);}for(let y=1;y<h-1;y++)border.push(y*w,y*w+w-1);
+ const bins=new Map();
+ for(const i of border){if(alpha[i]>8)continue;const k=i*4,key=[rgb[k]>>3,rgb[k+1]>>3,rgb[k+2]>>3].join(",");const bin=bins.get(key)||[];bin.push(i);bins.set(key,bin);}
+ const candidates=[...bins.values()].sort((a,b)=>b.length-a.length).slice(0,3);
+ for(const seeds of candidates){
+  if(seeds.length<Math.max(4,border.length*.06))continue;
+  const k=seeds[0]*4,ref=[rgb[k],rgb[k+1],rgb[k+2]];
+  const matches=i=>Math.max(Math.abs(rgb[i*4]-ref[0]),Math.abs(rgb[i*4+1]-ref[1]),Math.abs(rgb[i*4+2]-ref[2]))<=8;
+  seen.fill(0);head=0;tail=0;let known=0;
+  for(const i of seeds)if(!seen[i]&&matches(i)){seen[i]=1;queue[tail++]=i;}
+  while(head<tail){const i=queue[head++];if(alpha[i]<=8)known++;neighbours(i,w,h,j=>{if(!seen[j]&&matches(j)){seen[j]=1;queue[tail++]=j;}});}
+  if(tail<n*.025||known<tail*.6)continue;
+  for(let q=0;q<tail;q++){const i=queue[q];if(out[i]>0&&out[i]<240){removed+=out[i];out[i]=0;}}
+ }
  // Remove weak detached islands with no connection to a confident foreground.
  seen.fill(0);head=0;tail=0;
  for(let i=0;i<n;i++)if(out[i]>=240){seen[i]=1;queue[tail++]=i;}
