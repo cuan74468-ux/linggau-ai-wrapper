@@ -1,0 +1,14 @@
+import test from "node:test";import assert from "node:assert/strict";import {createStudioGate} from "./gate.mjs";
+function fixture(){
+ let t=0,n=0,denied=false,unmount=0,mounts=0,clears=0,signal,login=true;const timers=new Map(),states=[];
+ const session={active:true,member_id:"M-0009",expires_at:1800000};
+ const client={signIn:async()=>{if(!login)throw Error("denied");return session;},validate:async()=>{if(denied)throw Error("denied");return session;},signOut:async()=>({serverConfirmed:false}),clear:()=>clears++};
+ const schedule=(fn,ms)=>{timers.set(++n,{fn,at:t+ms});return n;},cancel=i=>timers.delete(i);
+ const options={client,now:()=>t,schedule,cancel,mount:async ctx=>{mounts++;signal=ctx.signal;return {unmount(){unmount++;}};},onState:s=>states.push(s)};
+ const step=async ms=>{t+=ms;for(const [id,v] of [...timers])if(v.at<=t&&timers.has(id)){timers.delete(id);v.fn();}await Promise.resolve();await Promise.resolve();};
+ return {options,states,step,deny:()=>denied=true,rejectLogin:()=>login=false,mounts:()=>mounts,unmount:()=>unmount,clears:()=>clears,signal:()=>signal,timers};
+}
+test("denied login never mounts; accepted login mounts once and revalidates",async()=>{const f=fixture(),g=createStudioGate(f.options);f.rejectLogin();assert.equal(await g.signIn("x"),false);assert.equal(f.mounts(),0);assert.equal(f.states.at(-1).phase,"locked");g.dispose();const h=fixture(),ok=createStudioGate(h.options);assert.equal(await ok.signIn("x"),true);assert.equal(h.mounts(),1);assert.equal(h.states.at(-1).phase,"active");await h.step(60000);assert.equal(h.states.at(-1).phase,"active");ok.dispose();});
+test("revocation and absolute expiry abort and remove mounted workspace",async()=>{let f=fixture(),g=createStudioGate(f.options);await g.signIn("x");f.deny();await f.step(60000);assert.equal(f.states.at(-1).phase,"locked");assert.equal(f.unmount(),1);assert.equal(f.signal().aborted,true);assert.equal(f.timers.size,0);f=fixture();g=createStudioGate(f.options);await g.signIn("x");await f.step(1800000);assert.equal(f.unmount(),1);assert.equal(f.states.at(-1).phase,"locked");});
+test("logout removes workspace before network result and distinguishes unconfirmed server",async()=>{const f=fixture(),g=createStudioGate(f.options);await g.signIn("x");const done=g.signOut();assert.equal(f.unmount(),1);assert.equal(f.signal().aborted,true);await done;assert.match(f.states.at(-1).message,/belum terkonfirmasi/);});
+test("late mount after expiry is disposed, never marks UI active",async()=>{const f=fixture();let resolve;let disposed=0;const g=createStudioGate({...f.options,mount:()=>new Promise(r=>resolve=r)});const pending=g.signIn("x");await Promise.resolve();await f.step(1800000);resolve({unmount(){disposed++;}});assert.equal(await pending,false);assert.equal(disposed,1);assert.equal(f.states.some(s=>s.phase==="active"),false);});

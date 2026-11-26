@@ -7,3 +7,6 @@ Next steps: verify backend CI, explicit gateway route and deploy in isolated STA
 ## Shell source protection
 
 Use a build-generated minified public loader; preserve explicit host apiKey declaration and supported host behavior. Percent encoding or obfuscation is reversible, not encryption. Test encoded shell separately before replacing any live shell; do not use document.write(unescape(...)) as a security boundary. Do not copy third-party source. ECDSA remains authenticity/integrity only, not confidentiality.
+
+## Session 2 — lifecycle candidate
+Backend gateway candidate ae746af on separate Ngulik branch. Add isolated login DOM component and injected lifecycle controller: mount only after verified exchange, revalidate every 60s, absolute expiry timer, abort/unmount on logout, revocation, failure or expiration. Late mount cannot attach after abort. No persistent credentials, no live endpoint, no runtime shell changes. Unit lifecycle tests only; actual browser UI, Gemini CORS and portal button pending. Browser timers may be throttled; this is not guaranteed instant revocation or provider-level authorization. No fake login in live app.
