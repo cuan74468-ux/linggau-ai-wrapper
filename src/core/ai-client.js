@@ -52,7 +52,7 @@ export function friendlyError(error){
   if(m.includes("LOCAL_OUTPUT_LIMIT")) return "PNG hasil melebihi 8 MB. Gunakan foto beresolusi lebih kecil.";
   if(m.includes("PIXEL_VERIFY_FAILED")) return "Piksel terlindungi berubah saat ekspor. Hasil ditolak; foto sumber tetap utuh.";
   if(m.includes("ALPHA_MASK_UNAVAILABLE")) return "Foto tidak memiliki latar transparan yang cukup. Tandai objek secara manual.";
-  if(m.includes("MASK_")) return "Tandai keliling objek dengan minimal tiga titik dan sisakan area latar.";
+  if(m.includes("MASK_")) return "Objek belum dapat dipisahkan dengan tepat. Coba foto yang objek dan latarnya lebih jelas, atau buka koreksi objek.";
   if(m.includes("BACKGROUND_UNCHANGED")) return "Pilih latar baru atau isi deskripsi latar.";
   if(m.includes("LOCAL_CANVAS")) return "Pemrosesan lokal tidak tersedia pada browser ini.";
   if(m.includes("401")) return "Akses AI belum terautentikasi. Pastikan akun Google masuk, beri waktu runtime siap, lalu tekan Coba Lagi secara manual.";
@@ -68,6 +68,6 @@ export function friendlyError(error){
   if(m.includes("AI_BUSY")) return "Satu permintaan masih berjalan.";
   if(m.includes("AI_CANCELLED"))return "Proses dibatalkan.";
   if(m.includes("AI_INPUT_INVALID")||m.includes("INVALID_PARAMETER"))return "Periksa foto dan pengaturan sebelum memproses.";
-  console.error("LINGGAU_TOOL_ERROR",/^[A-Z][A-Z0-9_]{2,79}$/.test(m)?m:"UNEXPECTED_ERROR");
+  console.warn("LINGGAU_TOOL_ERROR",/^[A-Z][A-Z0-9_]{2,79}$/.test(m)?m:"UNEXPECTED_ERROR");
   return "Proses belum berhasil. Periksa masukan atau coba lagi." ;
 }

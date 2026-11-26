@@ -4,7 +4,7 @@ import { createAssetStore } from "./core/assets.js";
 import { readImage, decodeImage } from "./core/images.js";
 import {assessOutput} from "./core/quality.js";
 import {supportsPrecision,backdropPlan,sharpenLocal,prepareCutout,composeCutout} from "./core/local-image.js";
-import {validPolygon} from "./core/pixels.js";
+import {validPolygon,validateDimensions} from "./core/pixels.js";
 import {processingRoute,primaryFieldIds} from "./core/processing-router.js";
 import {validateMask,brushMask} from "./core/vision-mask.js";
 import {needsReferenceReview,createReferenceReview} from "./core/reference-review.js";
@@ -214,6 +214,7 @@ export async function mount({root,ai,version,revision="",signal}){
         available=false;
         if(!reason){
           if(!maskImage)reason="Foto sedang disiapkan.";
+          else if(slots[0]?.width*slots[0]?.height>4000000||slots[0]?.width>4096||slots[0]?.height>4096)reason="Foto terlalu besar. Pilih foto maksimal 4 megapiksel.";
           else{try{const route=processingRoute(f,true,{...values,transparent});available=!route.needsAI||client.available().textToImage;if(!available)reason="Mesin pembuat latar tidak tersedia. Pilih putih, beige, atau PNG transparan.";}catch(e){reason=String(e.message).includes("BACKGROUND_UNCHANGED")?"Pilih latar baru atau PNG transparan.":"Periksa pengaturan latar.";} }
         }
       }
@@ -272,9 +273,9 @@ export async function mount({root,ai,version,revision="",signal}){
         }catch(e){
           if(epoch===viewEpoch&&maskSource===source){
             const code=String(e?.message||"");
-            const explanation=code.includes("VISION_TIMEOUT")?"Waktu pemuatan model habis.":code.includes("VISION_BUSY")?"Model masih memuat.":code.includes("MASK_TOO_SMALL")?"Bagian yang ditemukan terlalu kecil.":code.includes("MASK_AREA_INVALID")||code.includes("VISION_MASK_UNAVAILABLE")?"Objek belum ditemukan.":code.includes("VISION_LIBRARY_LOAD")?"Alat pemisah objek belum bisa dimuat.":code.includes("VISION_MODEL_LOAD")?"Alat pemisah objek belum siap.":"Deteksi tidak tersedia pada sesi ini.";
+            const explanation=code.includes("VISION_TIMEOUT")?"Waktu pemuatan model habis.":code.includes("VISION_BUSY")?"Model masih memuat.":code.includes("MASK_TOO_SMALL")?"Bagian yang ditemukan terlalu kecil.":code.includes("MASK_AREA_INVALID")||code.includes("VISION_MASK_UNAVAILABLE")?"Objek belum ditemukan.":code.includes("VISION_LIBRARY_LOAD")?"Alat pemisah objek belum bisa dimuat.":code.includes("VISION_MODEL_LOAD")?"Alat pemisah objek belum siap.":code.includes("VISION_INFERENCE_FAILED")?"Pemisahan objek gagal pada perangkat ini.":"Deteksi tidak tersedia pada sesi ini.";
             const message=explanation+(visionMask?" Pilihan objek sebelumnya tetap tersedia.":" Coba lagi atau buka koreksi objek.");
-            count.textContent=message;status.textContent=message;correction.open=true;
+            count.textContent=message;status.textContent=message;console.warn("LINGGAU_VISION_FAILED",/^[A-Z][A-Z0-9_]{2,79}$/.test(code)?code:"VISION_UNEXPECTED");correction.open=true;
           }
           return false;
         }finally{visionBusy=false;if(epoch===viewEpoch)refresh();}
@@ -347,15 +348,15 @@ export async function mount({root,ai,version,revision="",signal}){
     const actions=el("div",null,"actions");actions.append(run,retry);form.append(actions);output.append(el("h2","Hasil kerja"),el("p","Hasil akan muncul di sini setelah pemrosesan selesai.","empty result-placeholder"));layout.append(form,output);view.append(layout);refresh();
     async function process(){
       if(active||loading||visionBusy||run.disabled||slots.some(x=>!x))return;
-      active=true;retry.hidden=true;result=null;output.replaceChildren(el("p","Memproses…","empty"));status.textContent=localSharpen||precision?"Memproses foto…":"Mengirim satu permintaan AI…";refresh();
+      let phase="Persiapan";active=true;retry.hidden=true;result=null;output.replaceChildren(el("p","Memproses…","empty"));status.textContent=localSharpen||precision?"Memproses foto…":"Mengirim satu permintaan AI…";refresh();
       try{
         let res;
         const route=processingRoute(f,precision,{...values,transparent});
         if(route.kind==="local-sharpen")res=await sharpenLocal(slots[0],values);
-        else if(route.kind==="preserve"){const plan=route.plan;let valid=false;try{valid=visionMask?!!validateMask(visionMask):useAlpha?alphaAvailable:validPolygon(points);}catch{}if(!valid){if(!autoDetect||!await autoDetect()){output.replaceChildren(el("h2","Objek belum terdeteksi"),el("p","Foto asli tetap aman. Periksa jenis foto atau buka koreksi objek."));showPane("input");return;}}status.textContent="Menyiapkan latar dan mempertahankan objek…";const prepared=await prepareCutout(slots[0],points,useAlpha,visionMask);const generated=route.needsAI?await client.backdrop(plan.prompt):null;res=await composeCutout(prepared,plan,generated,shadow&&!transparent);}
-        else res=await client.execute(f,{...values},slots);
+        else if(route.kind==="preserve"){validateDimensions(slots[0].width,slots[0].height);const plan=route.plan;phase="Pemisahan objek";let valid=false;try{valid=visionMask?!!validateMask(visionMask):useAlpha?alphaAvailable:validPolygon(points);}catch{}if(!valid){if(!autoDetect||!await autoDetect()){output.replaceChildren(el("h2","Objek belum terdeteksi"),el("p","Foto asli tetap aman. Periksa jenis foto atau buka koreksi objek."));showPane("input");retry.hidden=false;return;}}phase="Menyiapkan foto";status.textContent="Menyiapkan latar dan mempertahankan objek…";const prepared=await prepareCutout(slots[0],points,useAlpha,visionMask);phase="Membuat latar";const generated=route.needsAI?await client.backdrop(plan.prompt):null;phase="Menyimpan foto";res=await composeCutout(prepared,plan,generated,shadow&&!transparent);console.info("LINGGAU_COMPOSITE_OK",res.width,res.height,res.protectedPixels);}
+        else {phase="Membuat hasil";res=await client.execute(f,{...values},slots);}
         if(disposed||signal?.aborted||epoch!==viewEpoch)return;
-        let verified=res;if(res.kind==="image"){const dimensions=await decodeImage(res);verified={...res,width:dimensions.width,height:dimensions.height};}
+        phase="Memeriksa hasil";let verified=res;if(res.kind==="image"){const dimensions=await decodeImage(res);verified={...res,width:dimensions.width,height:dimensions.height};}
         if(disposed||signal?.aborted||epoch!==viewEpoch)return;
         verified={...verified,quality:assessOutput(f,precision?{...values,ratio:"auto"}:values,verified,slots)};
         const jobSources=[...slots], parents=jobSources.filter(x=>x.id).map(x=>x.id);
@@ -383,7 +384,7 @@ export async function mount({root,ai,version,revision="",signal}){
           button("Tidak sesuai",()=>{if(active||epoch!==viewEpoch||review.state()!=="pending")return;review.reject();result=null;output.replaceChildren(el("h2","Hasil ditolak"),el("p","Foto sumber tetap utuh. Hasil tidak disimpan atau dipakai ulang."),button("Kembali ke pengaturan",adjust));status.textContent="Hasil ditolak oleh pengguna.";if(precision){visionMask=null;points=[];useAlpha=alphaAvailable;correction.open=true;drawMask();}ready.textContent="Hasil tidak disetujui";}));
           output.append(actions);status.textContent="Menunggu pemeriksaan hasil.";ready.textContent="Periksa hasil";
         }else finish(verified);
-      }catch(e){output.replaceChildren(el("p","Tidak ada hasil yang valid.","empty"));status.textContent=friendlyError(e);ready.textContent="Proses belum berhasil";retry.hidden=false;}
+      }catch(e){const message=friendlyError(e);const code=String(e?.message||"");console.warn("LINGGAU_PROCESS_FAILED",phase,/^[A-Z][A-Z0-9_]{2,79}$/.test(code)?code:"UNEXPECTED_ERROR");output.replaceChildren(el("p",phase+": "+message,"empty"));status.textContent=phase+": "+message;ready.textContent="Proses belum berhasil";retry.hidden=false;showPane("input");}
       finally{active=false;refresh();}
     }
   }
