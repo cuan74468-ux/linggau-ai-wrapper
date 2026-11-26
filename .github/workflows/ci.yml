@@ -25,6 +25,8 @@ jobs:
         run: node --experimental-default-type=module tests/browser/run.mjs --real-vision
       - name: Annotated portrait quality comparison (P3M-500-P fixed rows)
         run: node --experimental-default-type=module tests/browser/run.mjs --matte-benchmark
+      - name: Product mask diagnostic (real MagicTouch, annotated products)
+        run: node --experimental-default-type=module tests/browser/run.mjs --product-benchmark
 
   immutable-cdn:
     if: github.event_name == 'push' && github.ref == 'refs/heads/loader-hardening'
