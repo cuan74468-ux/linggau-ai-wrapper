@@ -1,0 +1,26 @@
+<!doctype html><html lang="id"><meta charset="utf-8"><title>Annotated portrait matting comparison</title><body><script type="module">
+import {segmentPerson} from "../../src/core/vision.js";
+import {refineMask} from "../../src/core/mask-refinement.js";
+import {segmentPortraitMatte} from "../../src/core/portrait-matting.js";
+const notes=[];
+async function read(src){const img=new Image();img.src=src;await img.decode();return img;}
+function canvas(w,h,img){const c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d").drawImage(img,0,0,w,h);return c;}
+function metrics(mask,gt){let ae=0,fg=0,bg=0,miss=0,leak=0;for(let i=0;i<mask.length;i++){const a=mask[i],t=gt[i*4];ae+=Math.abs(a-t)/255;if(t>=250){fg++;if(a<128)miss++;}if(t<=5){bg++;if(a>32)leak++;}}if(!fg||!bg)throw Error("Reference alpha lacks foreground or background");return {mae:ae/mask.length,miss:miss/fg,leak:leak/bg};}
+try{
+ let oldSum=0,newSum=0,oldLeak=0,newLeak=0;
+ for(const id of [0,37,111]){
+  const image=await read("/matte-fixture/"+id+"/image"),truth=await read("/matte-fixture/"+id+"/mask");
+  if(image.naturalWidth!==truth.naturalWidth||image.naturalHeight!==truth.naturalHeight)throw Error("Reference geometry mismatch");
+  const scale=Math.min(1,512/Math.max(image.naturalWidth,image.naturalHeight)),w=Math.round(image.naturalWidth*scale),h=Math.round(image.naturalHeight*scale);
+  const c=canvas(w,h,image),g=canvas(w,h,truth).getContext("2d").getImageData(0,0,w,h).data;
+  const raw=await segmentPerson(c),rgb=canvas(raw.width,raw.height,c).getContext("2d").getImageData(0,0,raw.width,raw.height).data;
+  let base=raw;try{base=refineMask(raw,rgb);}catch(e){notes.push("baseline refinement rejected "+id+" "+e.message);}
+  if(base.width!==w||base.height!==h)throw Error("Baseline geometry mismatch");
+  const matte=await segmentPortraitMatte(c),a=metrics(base.alpha,g),b=metrics(matte.alpha,g);
+  oldSum+=a.mae;newSum+=b.mae;oldLeak+=a.leak;newLeak+=b.leak;notes.push("row "+id+" MediaPipe="+JSON.stringify(a)+" MODNet="+JSON.stringify(b));
+  if(b.mae>.12||b.miss>.12||b.leak>.15)throw Error("Candidate absolute quality threshold failed "+id);
+ }
+ if(newSum>=oldSum||newLeak>oldLeak)throw Error("Candidate did not reduce mean absolute alpha error and background leakage");
+ window.__smoke={ok:true,detail:notes.join("; ")+"; mean alpha error old="+(oldSum/3).toFixed(5)+" new="+(newSum/3).toFixed(5)+"; background leak old="+(oldLeak/3).toFixed(5)+" new="+(newLeak/3).toFixed(5)};
+}catch(e){window.__smoke={ok:false,detail:notes.join("; ")+"; "+(e.stack||String(e))};}
+</script></body></html>
