@@ -1,23 +1,37 @@
 <!doctype html><html lang="id"><meta charset="utf-8"><title>Product segmentation benchmark</title><body><script type="module">
 import {segmentProduct} from "../../src/core/product-engine.js";
 import {openProductMatte} from "../../src/core/product-birefnet.js";
+import {interiorSeed} from "../../src/core/product-seed.js";
 import {prepareCutout,composeCutout,backdropPlan} from "../../src/core/local-image.js";
 const notes=[];async function read(src){const i=new Image();i.src=src;await i.decode();return i;}
 function surface(w,h,img){const c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d").drawImage(img,0,0,w,h);return c;}
 function metrics(mask,gt,w,h){if(mask.width!==w||mask.height!==h)throw Error("geometry mismatch");let fg=0,bg=0,miss=0,leak=0,inter=0,union=0;for(let i=0;i<w*h;i++){const a=mask.alpha[i]>=128,t=gt[i*4]>=128;if(t){fg++;if(!a)miss++;}else{bg++;if(a)leak++;}if(t&&a)inter++;if(t||a)union++;}if(!fg||!bg)throw Error("invalid reference");return {iou:inter/union,miss:miss/fg,leak:leak/bg};}
 try{
- let completed=0,auto=0,passed=0,syntheticPassed=0;
+ let completed=0,auto=0,passed=0,syntheticPassed=0,oraclePassed=0;
  for(const id of [0,12,64]){
   const image=await read("/matte-fixture/"+id+"/image"),truth=await read("/matte-fixture/"+id+"/mask");
   if(image.naturalWidth!==truth.naturalWidth||image.naturalHeight!==truth.naturalHeight)throw Error("reference geometry");
   const scale=Math.min(1,512/Math.max(image.naturalWidth,image.naturalHeight)),w=Math.round(image.naturalWidth*scale),h=Math.round(image.naturalHeight*scale);
   const c=surface(w,h,image),g=surface(w,h,truth).getContext("2d").getImageData(0,0,w,h).data;
-  let m;try{m=await segmentProduct(c);auto++;}catch(e){notes.push("row "+id+" auto rejected "+e.message);continue;}
-  const score=metrics(m,g,w,h);
-  const result=await composeCutout(await prepareCutout({mimeType:"image/png",base64:c.toDataURL("image/png").split(",")[1]},[],false,m),backdropPlan({background:"Putih bersih"}));
-  if(!result.pixelVerified)throw Error("protected PNG verification");
-  completed++;if(score.iou>=.9&&score.miss<=.05&&score.leak<=.05)passed++;
-  notes.push("row "+id+" "+JSON.stringify(score)+" protected="+result.protectedPixels);
+  const referenceAlpha=new Uint8ClampedArray(w*h);let fg=0,transparent=0,channelMismatch=0;
+  for(let i=0;i<w*h;i++){referenceAlpha[i]=g[4*i]>=128?255:0;if(referenceAlpha[i])fg++;if(g[4*i+3]<255)transparent++;if(g[4*i]!==g[4*i+1]||g[4*i]!==g[4*i+2])channelMismatch++;}
+  notes.push("row "+id+" reference "+JSON.stringify({w,h,foreground:fg/(w*h),transparent,channelMismatch}));
+  try{
+   const m=await segmentProduct(c);auto++;
+   const score=metrics(m,g,w,h);
+   const result=await composeCutout(await prepareCutout({mimeType:"image/png",base64:c.toDataURL("image/png").split(",")[1]},[],false,m),backdropPlan({background:"Putih bersih"}));
+   if(!result.pixelVerified)throw Error("protected PNG verification");
+   completed++;if(score.iou>=.9&&score.miss<=.05&&score.leak<=.05)passed++;
+   notes.push("row "+id+" automatic "+JSON.stringify(score)+" protected="+result.protectedPixels);
+  }catch(e){notes.push("row "+id+" auto rejected "+e.message);}
+  // Oracle point uses annotation solely to diagnose object selection vs extraction.
+  // It must never count toward automatic runtime quality.
+  try{
+   const point=interiorSeed({width:w,height:h,alpha:referenceAlpha});
+   const m=await segmentProduct(c,{point}),s=metrics(m,g,w,h);
+   if(s.iou>=.9&&s.miss<=.05&&s.leak<=.05)oraclePassed++;
+   notes.push("row "+id+" oracle-point "+JSON.stringify(s));
+  }catch(e){notes.push("row "+id+" oracle-point rejected "+e.message);}
  }
  // Separate exact-reference, off-center packaging exercise. Uses a drawn label,
  // not an AI reconstruction, and actual MagicTouch, not a mock.
@@ -31,6 +45,8 @@ try{
   }catch(e){notes.push("synthetic left="+left+" rejected "+e.message);}
  }
  // Separate experimental model comparison. It must not satisfy the actual runtime gate.
+ notes.push("annotation-assisted diagnostic threshold="+oraclePassed+"/3 (NOT automatic)");
+ if(new URLSearchParams(location.search).has("pilot")){
  let pilotPassed=0,pilot;
  try{
   const started=performance.now();pilot=await openProductMatte();
@@ -51,6 +67,7 @@ try{
  }catch(e){notes.push("BiRefNet unavailable "+e.message);}
  finally{await pilot?.close();}
  notes.push("BiRefNet pilot threshold="+pilotPassed+"/3");
+ }
  // Gate the actual automatic runtime path, not experimental alternatives.
  window.__smoke={ok:passed===3&&syntheticPassed===2,detail:notes.join("; ")+"; automatic="+auto+"/3; exported="+completed+"/3; threshold="+passed+"/3; labeled packs="+syntheticPassed+"/2"};
 }catch(e){window.__smoke={ok:false,detail:notes.join("; ")+"; "+(e.stack||String(e))};}
