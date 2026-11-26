@@ -1,0 +1,7 @@
+{
+  "name": "Linggau AI Studio",
+  "version": "0.1.0",
+  "release": "0.1.0",
+  "shellApi": 1,
+  "entry": "src/app.js"
+}

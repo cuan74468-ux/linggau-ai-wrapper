@@ -1,28 +1,16 @@
 <!doctype html><html lang="id"><meta charset="utf-8"><title>Product segmentation benchmark</title><body><script type="module">
 import {segmentProduct} from "../../src/core/product-engine.js";
-import {segmentSalient} from "../../src/core/product-saliency.js";
-import {interiorSeed,productConsensus} from "../../src/core/product-consensus.js";
 import {prepareCutout,composeCutout,backdropPlan} from "../../src/core/local-image.js";
 const notes=[];async function read(src){const i=new Image();i.src=src;await i.decode();return i;}
 function surface(w,h,img){const c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d").drawImage(img,0,0,w,h);return c;}
 function metrics(mask,gt,w,h){if(mask.width!==w||mask.height!==h)throw Error("geometry mismatch");let fg=0,bg=0,miss=0,leak=0,inter=0,union=0;for(let i=0;i<w*h;i++){const a=mask.alpha[i]>=128,t=gt[i*4]>=128;if(t){fg++;if(!a)miss++;}else{bg++;if(a)leak++;}if(t&&a)inter++;if(t||a)union++;}if(!fg||!bg)throw Error("invalid reference");return {iou:inter/union,miss:miss/fg,leak:leak/bg};}
 try{
- let completed=0,auto=0,passed=0,saliencyPassed=0,seedPassed=0,consensusPassed=0;
+ let completed=0,auto=0,passed=0,syntheticPassed=0;
  for(const id of [0,12,64]){
   const image=await read("/matte-fixture/"+id+"/image"),truth=await read("/matte-fixture/"+id+"/mask");
   if(image.naturalWidth!==truth.naturalWidth||image.naturalHeight!==truth.naturalHeight)throw Error("reference geometry");
   const scale=Math.min(1,512/Math.max(image.naturalWidth,image.naturalHeight)),w=Math.round(image.naturalWidth*scale),h=Math.round(image.naturalHeight*scale);
   const c=surface(w,h,image),g=surface(w,h,truth).getContext("2d").getImageData(0,0,w,h).data;
-  const candidate=await segmentSalient(c),cs=metrics(candidate,g,w,h);const cut=await composeCutout(await prepareCutout({mimeType:"image/png",base64:c.toDataURL("image/png").split(",")[1]},[],false,candidate),backdropPlan({background:"Putih bersih"}));if(!cut.pixelVerified)throw Error("saliency PNG verification");if(cs.iou>=.9&&cs.miss<=.05&&cs.leak<=.05)saliencyPassed++;notes.push("row "+id+" saliency "+JSON.stringify(cs)+" protected="+cut.protectedPixels);
-  try{
-   const seeded=await segmentProduct(c,{point:interiorSeed(candidate)}),ss=metrics(seeded,g,w,h);
-   notes.push("row "+id+" saliency-seeded "+JSON.stringify(ss));if(ss.iou>=.9&&ss.miss<=.05&&ss.leak<=.05)seedPassed++;
-   const combined=productConsensus(candidate,seeded),score=metrics(combined,g,w,h);
-   const exported=await composeCutout(await prepareCutout({mimeType:"image/png",base64:c.toDataURL("image/png").split(",")[1]},[],false,combined),backdropPlan({background:"Putih bersih"}));
-   if(!exported.pixelVerified)throw Error("consensus PNG verification");
-   if(score.iou>=.9&&score.miss<=.05&&score.leak<=.05)consensusPassed++;
-   notes.push("row "+id+" consensus "+JSON.stringify(score)+" agreement="+combined.agreement.toFixed(4));
-  }catch(e){notes.push("row "+id+" consensus rejected "+e.message);}
   let m;try{m=await segmentProduct(c);auto++;}catch(e){notes.push("row "+id+" auto rejected "+e.message);continue;}
   const score=metrics(m,g,w,h);
   const result=await composeCutout(await prepareCutout({mimeType:"image/png",base64:c.toDataURL("image/png").split(",")[1]},[],false,m),backdropPlan({background:"Putih bersih"}));
@@ -37,10 +25,11 @@ try{
   try{const m=await segmentProduct(c);const g=new Uint8ClampedArray(w*h*4);for(let yy=60;yy<260;yy++)for(let xx=left;xx<left+140;xx++)g[(yy*w+xx)*4]=255;
   let label=0,opaque=0;for(let yy=125;yy<170;yy++)for(let xx=left+24;xx<left+116;xx++){label++;if(m.alpha[yy*w+xx]===255)opaque++;}
   const score=metrics(m,g,w,h);const r=await composeCutout(await prepareCutout({mimeType:"image/png",base64:c.toDataURL("image/png").split(",")[1]},[],false,m),backdropPlan({background:"Putih bersih"}));if(!r.pixelVerified)throw Error("label PNG verification");
+  if(score.iou>=.9&&score.miss<=.05&&score.leak<=.05&&opaque===label)syntheticPassed++;
   notes.push("synthetic left="+left+" "+JSON.stringify(score)+" labelOpaque="+(opaque/label).toFixed(4));
   }catch(e){notes.push("synthetic left="+left+" rejected "+e.message);}
  }
- // Diagnostic only: poor quality or refusal is reported, not counted as quality PASS.
- window.__smoke={ok:true,detail:notes.join("; ")+"; automatic="+auto+"/3; exported="+completed+"/3; threshold="+passed+"/3; saliency threshold="+saliencyPassed+"/3; seeded threshold="+seedPassed+"/3; consensus threshold="+consensusPassed+"/3; diagnostic only"};
+ // Gate the actual automatic runtime path, not experimental alternatives.
+ window.__smoke={ok:passed===3&&syntheticPassed===2,detail:notes.join("; ")+"; automatic="+auto+"/3; exported="+completed+"/3; threshold="+passed+"/3; labeled packs="+syntheticPassed+"/2"};
 }catch(e){window.__smoke={ok:false,detail:notes.join("; ")+"; "+(e.stack||String(e))};}
 </script></body></html>

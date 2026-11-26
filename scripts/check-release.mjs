@@ -11,7 +11,8 @@ for(const file of files.filter(p=>/^(src\/|canvas\/|\.github\/)/.test(p)&&/\.(?:
  const source=readFileSync(file,"utf8");
  if(patterns.some(p=>p.test(source)))throw Error("POSSIBLE_SECRET_IN_"+file);
 }
-if(!/const apiKey\s*=\s*""\s*;/.test(readFileSync("canvas/shell.html","utf8")))throw Error("NONEMPTY_OR_MISSING_API_KEY_GUARD");
+const shell=readFileSync("canvas/shell.html","utf8");
+if((shell.match(/\b(?:const|let|var)\s+apiKey\b/g)||[]).length!==1||!/^const apiKey\s*=\s*""\s*;\s*$/m.test(shell))throw Error("NONEMPTY_OR_MISSING_API_KEY_DECLARATION");
 console.log("SOURCE_CHECK_PASS",sha);
 if(process.argv.includes("--cdn")){
  const hash=b=>createHash("sha256").update(b).digest("hex");

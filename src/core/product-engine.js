@@ -1,14 +1,33 @@
-// Shared product pipeline: real interactive segmentation, never fabricate pixels.
+// Shared actual local product pipeline. User point overrides automatic selection.
 import {segmentObject} from "./vision.js";
 import {findObjectSeed,refineMask} from "./mask-refinement.js";
-import {validateMask} from "./vision-mask.js";
-export async function segmentProduct(canvas,{point=null,segment=segmentObject}={}){
+import {validateMask,expandMask} from "./vision-mask.js";
+import {segmentSalient} from "./product-saliency.js";
+import {interiorSeed} from "./product-seed.js";
+import {refineProductEdges} from "./product-edge.js";
+function align(mask,w,h){
+ validateMask(mask);
+ if(mask.width===w&&mask.height===h)return mask;
+ const rgba=expandMask(mask,w,h),alpha=new Uint8ClampedArray(w*h);
+ for(let i=0;i<alpha.length;i++)alpha[i]=rgba[i*4+3];
+ return validateMask({...mask,width:w,height:h,alpha});
+}
+export async function segmentProduct(canvas,{point=null,segment=segmentObject,saliency=segmentSalient,onStage=()=>{}}={}){
  const w=canvas?.width,h=canvas?.height;
  if(!Number.isInteger(w)||!Number.isInteger(h)||w<1||h<1||w*h>360000)throw Error("MASK_INVALID");
  const rgb=canvas.getContext("2d").getImageData(0,0,w,h).data;
- const seed=point||findObjectSeed(rgb,w,h);
- if(!seed)throw Error("OBJECT_SEED_UNCERTAIN");
- const m=validateMask(await segment(canvas,seed));
- let data=rgb;if(m.width!==w||m.height!==h){const r=document.createElement("canvas");r.width=m.width;r.height=m.height;try{const ctx=r.getContext("2d");ctx.drawImage(canvas,0,0,m.width,m.height);data=ctx.getImageData(0,0,m.width,m.height).data;}finally{r.width=r.height=1;}}
- return {...refineMask(m,data),engine:"product-interactive"};
+ let seed=point||findObjectSeed(rgb,w,h),prior=null;
+ if(!seed){
+  onStage("Mencari objek utama…");
+  prior=align(await saliency(canvas),w,h);seed=interiorSeed(prior);
+ }
+ onStage("Memisahkan objek dari latar…");
+ const m=align(await segment(canvas,seed),w,h);
+ if(prior){
+  let a=0,b=0,both=0;
+  for(let i=0;i<m.alpha.length;i++){const x=prior.alpha[i]>=128,y=m.alpha[i]>=128;if(x)a++;if(y)b++;if(x&&y)both++;}
+  // Agreement is a refusal guard, not a claim of segmentation accuracy.
+  if(!a||!b||both/(a+b-both)<.65||both/a<.72||both/b<.72)throw Error("MASK_CLEANUP_UNCERTAIN");
+ }
+ return {...refineProductEdges(refineMask(m,rgb),rgb),engine:prior?"product-saliency-seeded":"product-interactive"};
 }
