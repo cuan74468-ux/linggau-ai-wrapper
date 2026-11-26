@@ -55,7 +55,7 @@ async function run(){
  assert(document.querySelectorAll(".mobile-item").length===10,"7 categories plus assistant, search, results");
  assert(!document.querySelector(".advanced-settings").open,"advanced settings collapsed");
  // Opaque input and vision fixture: browser dialogs must not be required.
- const opaque=document.createElement("canvas");opaque.width=80;opaque.height=100;const o=opaque.getContext("2d");o.fillStyle="#ccc";o.fillRect(0,0,80,100);o.drawImage(sample,0,0);
+ const opaque=document.createElement("canvas");opaque.width=80;opaque.height=100;const o=opaque.getContext("2d");o.fillStyle="#ccc";o.fillRect(0,0,80,100);o.drawImage(sample,0,0);o.fillStyle="#000";o.fillRect(0,0,4,4);
  const opaqueBlob=await new Promise(r=>opaque.toBlob(r,"image/png"));const dt=new DataTransfer();dt.items.add(new File([opaqueBlob],"opaque.png",{type:"image/png"}));const fi=document.querySelector("#photo-0");fi.files=dt.files;fi.dispatchEvent(new Event("change",{bubbles:true}));
  await wait(()=>document.querySelector(".mask-area")?.textContent.includes("Siap deteksi otomatis"),"opaque input ready");
  assert(!document.querySelector(".precision-correction").open,"advanced corrections collapsed");
@@ -63,7 +63,11 @@ async function run(){
  assert(!btn(document,"Proses foto").disabled,"auto detection can start with no manual mask");
  window.confirm=()=>{throw Error("native dialog not permitted");};
  btn(document,"Proses foto").click();
- await wait(()=>btn(document,"Sesuai, gunakan"),"automatic detection and processing");
+ await wait(()=>document.querySelector(".input-panel .status").textContent.includes("Latar produk belum cocok"),"daily complex auto blocked");
+ assert(!btn(document,"Sesuai, gunakan")&&!btn(document,"Unduh gambar")&&calls===0,"no unchecked export or provider call");
+ const beta=document.querySelector("#product-complex-beta");assert(beta&&!beta.checked,"beta off by default");beta.click();
+ btn(document,"Proses foto").click();
+ await wait(()=>btn(document,"Sesuai, gunakan"),"explicit beta detection and processing");
  assert(calls===0,"solid background uses no Gemini");
  btn(document,"Sesuai, gunakan").click();
  await wait(()=>btn(document,"Unduh gambar"),"auto output accepted");

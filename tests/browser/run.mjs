@@ -7,7 +7,8 @@ import {setTimeout as delay} from "node:timers/promises";
 const liveLoader=process.argv.includes("--live-loader");
 const expectedPreview=liveLoader?JSON.parse(await readFile("docs/channel.json","utf8")).commit:null;
 const benchmark=process.argv.includes("--matte-benchmark");
-const product=process.argv.includes("--product-benchmark");
+const dailyProduct=process.argv.includes("--daily-product");
+const product=dailyProduct||process.argv.includes("--product-benchmark");
 const real=benchmark||product||process.argv.includes("--real-vision");
 const root=process.cwd(), dir=await mkdtemp(resolve(tmpdir(),"studio-smoke-"));
 const types={".html":"text/html",".js":"text/javascript",".mjs":"text/javascript",".css":"text/css",".svg":"image/svg+xml"};
@@ -28,7 +29,7 @@ try{
  const cdp=(method,params={})=>new Promise((resolve,reject)=>{const id=++seq;pending.set(id,{resolve,reject});ws.send(JSON.stringify({id,method,params}));});
  if(liveLoader){await cdp("Network.enable");await cdp("Runtime.enable");}
  await cdp("Emulation.setDeviceMetricsOverride",product?{width:1200,height:1100,deviceScaleFactor:1,mobile:false}:{width:360,height:800,deviceScaleFactor:1,mobile:true});
- await cdp("Page.navigate",{url:"http://127.0.0.1:"+server.address().port+(liveLoader?"/canvas/shell.html":product?"/tests/browser/product-benchmark.html"+(process.argv.includes("--birefnet-pilot")?"?pilot=1":""):benchmark?"/tests/browser/matte-benchmark.html":real?"/tests/browser/real-vision.html":"/tests/browser/smoke.html")});
+ await cdp("Page.navigate",{url:"http://127.0.0.1:"+server.address().port+(liveLoader?"/canvas/shell.html":product?"/tests/browser/product-benchmark.html"+(dailyProduct?"?daily=1":process.argv.includes("--birefnet-pilot")?"?pilot=1":""):benchmark?"/tests/browser/matte-benchmark.html":real?"/tests/browser/real-vision.html":"/tests/browser/smoke.html")});
  let result;
  for(let i=0;i<(real?3000:liveLoader?700:240);i++){await delay(100);try{const expression=liveLoader?`(()=>{const app=document.getElementById("app"),brand=document.querySelector("#studio .brand"),rail=document.querySelector("#studio .mobile-rail");if(app?.getAttribute("aria-busy")==="false"&&!brand)return {ok:false,detail:app.innerText.slice(0,400)};if(!brand||!rail||getComputedStyle(rail).overflowX!=="auto")return null;const rev=${JSON.stringify(expectedPreview)},good=JSON.parse(localStorage.getItem("linggau-loader-v2:lkg:preview")||"null");return {ok:brand.textContent.includes(rev.slice(0,7))&&good?.commit===rev&&document.documentElement.scrollWidth<=innerWidth+1,detail:"revision="+brand.textContent+" LKG="+good?.commit+" viewport="+innerWidth+" scrollWidth="+document.documentElement.scrollWidth};})()`:"window.__smoke";const r=await cdp("Runtime.evaluate",{expression,returnByValue:true});result=r.result?.value;if(result)break;}catch{}}
  if(liveLoader){
@@ -46,5 +47,5 @@ try{
   }catch(e){console.warn("PRODUCT_EVIDENCE_FAILED",String(e.message).slice(0,200));}
  }
  if(!result?.ok)throw Error(result?.detail||"Browser smoke timed out");
- console.log((liveLoader?"LIVE_LOADER_PASS: ":product?"PRODUCT_BENCHMARK_COMPLETE: ":benchmark?"MATTE_BENCHMARK_PASS: ":real?"REAL_VISION_PASS: ":"BROWSER_SMOKE_PASS: ")+result.detail);
+ console.log((liveLoader?"LIVE_LOADER_PASS: ":dailyProduct?"DAILY_PRODUCT_PASS: ":product?"PRODUCT_BENCHMARK_COMPLETE: ":benchmark?"MATTE_BENCHMARK_PASS: ":real?"REAL_VISION_PASS: ":"BROWSER_SMOKE_PASS: ")+result.detail);
 }finally{ws?.close();browser.kill("SIGKILL");server.close();await delay(200);await rm(dir,{recursive:true,force:true}).catch(()=>{});}

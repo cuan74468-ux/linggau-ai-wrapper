@@ -1,7 +1,7 @@
 // Conservative color heuristic for separated opaque products on a flat backdrop.
 // Not semantic recognition; uncertain cases fall back to the existing model.
 import {validateMask} from "./vision-mask.js";
-export function flatCatalogMask(rgb,w,h,point=null){
+export function flatCatalogMask(rgb,w,h,point=null,{allowSingle=false}={}){
  if(!Number.isInteger(w)||!Number.isInteger(h)||w<32||h<32||w*h>360000||!(rgb instanceof Uint8ClampedArray)||rgb.length!==w*h*4)return null;
  const n=w*h,border=[];
  for(let x=0;x<w;x++)border.push(x,(h-1)*w+x);
@@ -31,7 +31,7 @@ export function flatCatalogMask(rgb,w,h,point=null){
    else alpha[k]=255;
   }
  }
- if(count<2||!foreground||weak>foreground*.08)return null;
+ if(count<(allowSingle?1:2)||!foreground||weak>foreground*.08)return null;
  if(point){
   if(!Number.isFinite(point.x)||!Number.isFinite(point.y)||point.x<0||point.x>1||point.y<0||point.y>1)return null;
   const i=Math.min(h-1,Math.floor(point.y*h))*w+Math.min(w-1,Math.floor(point.x*w));
