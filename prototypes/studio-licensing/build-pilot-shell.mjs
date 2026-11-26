@@ -3,7 +3,7 @@ import {readFile,writeFile} from "node:fs/promises";
 import {resolve} from "node:path";
 import {pathToFileURL} from "node:url";
 import {Script} from "node:vm";
-export const LICENSE_REF="79a797a65f1118117de47eeb04822fcab664f1f9";
+export const LICENSE_REF="49a7943d6f1a107790f07e8d0c132496e751bc30";
 export const APP_REF="4d9be8d4430c9427445ee0271262ef8093e60c7b";
 const API=/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/;
 function replaceOnce(source,from,to){if(source.split(from).length!==2)throw Error("PILOT_SOURCE_DRIFT");return source.replace(from,to);}
