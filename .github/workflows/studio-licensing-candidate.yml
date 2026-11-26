@@ -7,7 +7,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,3 +27,13 @@ jobs:
         env:
           STUDIO_MINIFIER_DIR: ${{ runner.temp }}/studio-minifier
         run: node prototypes/studio-licensing/minify-shell.mjs canvas/shell.html "$RUNNER_TEMP/shell.min.html"
+      - name: Generate separate default-off pilot shell (temporary only)
+        run: node prototypes/studio-licensing/build-pilot-shell.mjs canvas/shell.html "$RUNNER_TEMP/pilot-shell.html"
+      - name: Browser default-off pilot shell
+        run: node --experimental-default-type=module tests/browser/run.mjs --studio-pilot-disabled
+      - name: Browser configured pilot shell with synthetic local transport
+        run: node --experimental-default-type=module tests/browser/run.mjs --studio-pilot-configured
+      - name: Browser parity for minified pilot shell with synthetic local transport
+        env:
+          STUDIO_MINIFIER_DIR: ${{ runner.temp }}/studio-minifier
+        run: node --experimental-default-type=module tests/browser/run.mjs --studio-pilot-minified
