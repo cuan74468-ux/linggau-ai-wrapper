@@ -24,5 +24,8 @@ export function mountStudioLogin({root,client,mount,pollMs=60000}){
  }});
  form.addEventListener("submit",e=>{e.preventDefault();const code=input.value.trim();input.value="";void gate.signIn(code);});
  logout.addEventListener("click",()=>void gate.signOut());
- return {unmount(){gate.dispose();root.replaceChildren();}};
+ const foreground=()=>{if(doc.visibilityState==="visible")void gate.revalidate();};
+ doc.addEventListener("visibilitychange",foreground);
+ doc.defaultView?.addEventListener("focus",foreground);
+ return {unmount(){doc.removeEventListener("visibilitychange",foreground);doc.defaultView?.removeEventListener("focus",foreground);gate.dispose();root.replaceChildren();}};
 }

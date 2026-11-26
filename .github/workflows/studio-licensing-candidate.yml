@@ -4,17 +4,30 @@ on:
     branches: [studio-licensing-candidate]
 permissions:
   contents: read
+concurrency:
+  group: studio-license-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: '22'
-      - name: Install exact build-only minifier without lifecycle scripts
-        run: npm install --prefix "$RUNNER_TEMP/studio-minifier" --ignore-scripts --no-audit --no-fund --no-save terser@5.39.0
+          package-manager-cache: false
+      - name: Resolve public build-only dependency lock (one-time candidate evidence)
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/studio-minifier"
+          cp prototypes/studio-licensing/build-tools/package.json "$RUNNER_TEMP/studio-minifier/"
+          cd "$RUNNER_TEMP/studio-minifier"
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          node -e 'console.log("STUDIO_LOCK_JSON "+JSON.stringify(require("./package-lock.json")))'
+          npm ci --ignore-scripts --no-audit --no-fund
       - name: Test license client and shell packaging
         env:
           STUDIO_MINIFIER_DIR: ${{ runner.temp }}/studio-minifier
