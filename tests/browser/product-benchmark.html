@@ -1,5 +1,6 @@
 <!doctype html><html lang="id"><meta charset="utf-8"><title>Product segmentation benchmark</title><body><script type="module">
 import {segmentProduct} from "../../src/core/product-engine.js";
+import {openProductMatte} from "../../src/core/product-birefnet.js";
 import {prepareCutout,composeCutout,backdropPlan} from "../../src/core/local-image.js";
 const notes=[];async function read(src){const i=new Image();i.src=src;await i.decode();return i;}
 function surface(w,h,img){const c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d").drawImage(img,0,0,w,h);return c;}
@@ -29,6 +30,27 @@ try{
   notes.push("synthetic left="+left+" "+JSON.stringify(score)+" labelOpaque="+(opaque/label).toFixed(4));
   }catch(e){notes.push("synthetic left="+left+" rejected "+e.message);}
  }
+ // Separate experimental model comparison. It must not satisfy the actual runtime gate.
+ let pilotPassed=0,pilot;
+ try{
+  const started=performance.now();pilot=await openProductMatte();
+  notes.push("BiRefNet model ready ms="+Math.round(performance.now()-started));
+  for(const id of [0,12,64]){
+   try{
+    const image=await read("/matte-fixture/"+id+"/image"),truth=await read("/matte-fixture/"+id+"/mask");
+    if(image.naturalWidth!==truth.naturalWidth||image.naturalHeight!==truth.naturalHeight)throw Error("reference geometry");
+    const scale=Math.min(1,512/Math.max(image.naturalWidth,image.naturalHeight)),w=Math.round(image.naturalWidth*scale),h=Math.round(image.naturalHeight*scale);
+    const c=surface(w,h,image),g=surface(w,h,truth).getContext("2d").getImageData(0,0,w,h).data,t=performance.now();
+    const m=await pilot.segment(c),s=metrics(m,g,w,h);
+    const r=await composeCutout(await prepareCutout({mimeType:"image/png",base64:c.toDataURL("image/png").split(",")[1]},[],false,m),backdropPlan({background:"Putih bersih"}));
+    if(!r.pixelVerified)throw Error("pilot PNG verification");
+    if(s.iou>=.9&&s.miss<=.05&&s.leak<=.05)pilotPassed++;
+    notes.push("BiRefNet row "+id+" "+JSON.stringify(s)+" protected="+r.protectedPixels+" ms="+Math.round(performance.now()-t));
+   }catch(e){notes.push("BiRefNet row "+id+" rejected "+e.message);}
+  }
+ }catch(e){notes.push("BiRefNet unavailable "+e.message);}
+ finally{await pilot?.close();}
+ notes.push("BiRefNet pilot threshold="+pilotPassed+"/3");
  // Gate the actual automatic runtime path, not experimental alternatives.
  window.__smoke={ok:passed===3&&syntheticPassed===2,detail:notes.join("; ")+"; automatic="+auto+"/3; exported="+completed+"/3; threshold="+passed+"/3; labeled packs="+syntheticPassed+"/2"};
 }catch(e){window.__smoke={ok:false,detail:notes.join("; ")+"; "+(e.stack||String(e))};}
