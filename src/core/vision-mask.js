@@ -39,3 +39,34 @@ export function contactBounds(source,mask,w,h){
  if(x1<=x0||y1<0||y1>=h-2)return null;
  return {x:(x0+x1)/2,y:y1,rx:Math.max(2,(x1-x0)*.48),ry:Math.max(2,Math.min(h*.035,(x1-x0)*.065))};
 }
+
+// Six semantic planes: background, hair, body skin, face skin, clothes, accessories.
+// Use the combined person probability, not a single skin or hair class.
+// Preserve high-confidence facial skin and fill only small enclosed gaps.
+export function portraitAlpha(planes,w,h){
+ if(!Number.isInteger(w)||!Number.isInteger(h)||w<1||h<1||w*h>360000||!Array.isArray(planes)||planes.length!==6||planes.some(p=>p.length!==w*h))throw Error("PORTRAIT_MASK_INVALID");
+ const n=w*h,alpha=new Uint8ClampedArray(n);let face=0;
+ for(let i=0;i<n;i++){
+  let sum=0;for(const p of planes){const v=p[i];if(!Number.isFinite(v)||v<0||v>1)throw Error("PORTRAIT_MASK_INVALID");sum+=v;}
+  if(sum<.85||sum>1.15)throw Error("PORTRAIT_MASK_INVALID");
+  const fg=1-planes[0][i], skin=planes[3][i];
+  // Keep confident face pixels fully opaque; never fill an arbitrary rectangle.
+  if(skin>=.55&&fg>=.65){alpha[i]=255;face++;}
+  else alpha[i]=fg>=.73?255:fg<=.16?0:Math.round((fg-.16)/.57*255);
+ }
+ // Fill tiny internal holes only: background connected to the frame is untouched.
+ const seen=new Uint8Array(n),queue=new Int32Array(n),limit=Math.max(1,Math.floor(n*.003));
+ for(let i=0;i<n;i++){
+  if(seen[i]||alpha[i]>=128)continue;
+  let head=0,tail=1,edge=false;queue[0]=i;seen[i]=1;
+  while(head<tail){const k=queue[head++],x=k%w,y=Math.floor(k/w);if(x===0||x===w-1||y===0||y===h-1)edge=true;
+   const visit=j=>{if(!seen[j]&&alpha[j]<128){seen[j]=1;queue[tail++]=j;}};
+   if(x>0)visit(k-1);if(x<w-1)visit(k+1);if(y>0)visit(k-w);if(y<h-1)visit(k+w);
+  }
+  if(!edge&&tail<=limit)for(let j=0;j<tail;j++)alpha[queue[j]]=255;
+ }
+ const result=validateMask({width:w,height:h,alpha});
+ // For a visible face, count opaque semantic face pixels; this is not a
+ // face detector or a proof that all facial features are present.
+ return {...result,faceCorePixels:face};
+}

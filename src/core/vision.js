@@ -1,8 +1,8 @@
 // Optional lazy-loaded MediaPipe MagicTouch v1. No image upload. User must opt in.
-import {confidenceAlpha} from "./vision-mask.js";
+import {confidenceAlpha,portraitAlpha} from "./vision-mask.js";
 const BASE="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21";
 const MODEL="https://storage.googleapis.com/mediapipe-models/interactive_segmenter/magic_touch/float32/1/magic_touch.tflite";
-const PERSON_MODEL="https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite";
+const PERSON_MODEL="https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite";
 let busy=false,initializing=false;
 // Emscripten routes this documented informational TFLite line through stderr.
 // In embedded hosts that treat console.error as a fatal UI event, preserve the
@@ -31,7 +31,13 @@ export async function segmentObject(canvas,point={x:.5,y:.5},load=()=>import(BAS
    try{
     const masks=r?.confidenceMasks,count=masks?.length||0;
     console.info("LINGGAU_VISION_MASK_CHANNELS",kind,count);
-    // These pinned binary segmentation models can expose a single foreground
+    if(kind==="person"){
+      if(count!==6)throw Error("PORTRAIT_MASK_INVALID");
+      const w=masks[0].width,h=masks[0].height;
+      if(masks.some(m=>m.width!==w||m.height!==h))throw Error("PORTRAIT_MASK_INVALID");
+      result=portraitAlpha(masks.map(m=>m.getAsFloat32Array()),w,h);return;
+    }
+    // The binary interactive model can expose a single foreground
     // probability plane (index 0), or two per-class planes (foreground index 1).
     const fg=count===1?masks[0]:count===2?masks[1]:null;
     if(!fg)throw Error("VISION_MASK_UNAVAILABLE");
