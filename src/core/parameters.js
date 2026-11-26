@@ -6,9 +6,10 @@ export const OPTIONS = Object.freeze({
   angle: ["Pertahankan asli","Eye level","45 derajat","Top view"]
 });
 export function normalize(feature, values = {}) {
+  if(!values||typeof values!=="object"||Array.isArray(values))throw Error("INVALID_PARAMETER");
   const out = {};
   for (const field of feature.fields) {
-    const v = values[field.id] ?? field.default ?? "";
+    const v = (Object.hasOwn(values,field.id)?values[field.id]:undefined) ?? field.default ?? "";
     if (typeof v !== "string") throw new Error("INVALID_PARAMETER");
     const value = v.trim();
     if (field.required && !value) throw new Error("Lengkapi " + field.label);

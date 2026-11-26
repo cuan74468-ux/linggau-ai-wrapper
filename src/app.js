@@ -41,7 +41,7 @@ function downloadText(asset){
 }
 export async function mount({root,ai,version,revision="",signal}){
   if(!(root instanceof HTMLElement))throw new Error("APP_ROOT_INVALID");
-  const client=createAIClient(ai), store=createAssetStore(), conversation=createChatSession();
+  const client=createAIClient(ai,{signal}), store=createAssetStore(), conversation=createChatSession();
   const css=el("link");css.rel="stylesheet";css.href=new URL("./styles/studio.css",import.meta.url).href;
   const studio=el("section");studio.id="studio";
   const top=el("header",null,"top");
