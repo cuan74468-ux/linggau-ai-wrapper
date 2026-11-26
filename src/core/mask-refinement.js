@@ -12,6 +12,11 @@ export function refineMask(mask,rgb){
  // Grow known background into weak, locally similar pixels only.
  while(head<tail){const i=queue[head++];neighbours(i,w,h,j=>{
   if(seen[j]||alpha[j]>112||distance(rgb,i,j)>24)return;
+  if(alpha[j]>8){
+   const x=j%w,y=Math.floor(j/w);let nearCore=false;
+   for(let yy=Math.max(0,y-2);yy<=Math.min(h-1,y+2)&&!nearCore;yy++)for(let xx=Math.max(0,x-2);xx<=Math.min(w-1,x+2);xx++){const k=yy*w+xx;if(alpha[k]>=240&&distance(rgb,j,k)<=24){nearCore=true;break;}}
+   if(nearCore)return;
+  }
   seen[j]=1;queue[tail++]=j;removed+=out[j];out[j]=0;
  });}
  // Remove weak detached islands with no connection to a confident foreground.
