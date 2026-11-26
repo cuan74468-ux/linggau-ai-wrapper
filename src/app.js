@@ -10,6 +10,7 @@ import {validateMask,brushMask} from "./core/vision-mask.js";
 import {needsReferenceReview,createReferenceReview} from "./core/reference-review.js";
 import {validatePresets,applyPreset} from "./core/presets.js";
 import {createChatSession,CHAT_MAX_INPUT} from "./core/chat.js";
+import {ROI_TOOL,matchesRoi,calculateAds,adsReport} from "./core/roi-calculator.js";
 
 function el(tag,text,cls){const n=document.createElement(tag);if(text!=null)n.textContent=text;if(cls)n.className=cls;return n;}
 function button(text,fn,cls){const n=el("button",text,cls);n.type="button";n.addEventListener("click",fn);return n;}
@@ -91,7 +92,7 @@ export async function mount({root,ai,version,revision="",signal}){
     page="category";current=null;slots=[];result=null;activeCategory=cat;
     const h=el("h1",cat==="all"?"Cari alat":cat),search=el("input");search.type="search";search.placeholder="Cari alat…";search.setAttribute("aria-label","Cari alat");
     const items=el("div",null,"category-tools");view.replaceChildren(h,search,items);
-    const draw=()=>{items.replaceChildren();const matches=findFeatures(search.value,cat);for(const f of matches){const card=button("",()=>change(()=>workspace(f)),"category-tool");card.dataset.tool=f.id;card.append(el("strong",f.title),el("small",f.description));items.append(card);}if(!matches.length)items.append(el("p","Alat tidak ditemukan.","empty"));};
+    const draw=()=>{items.replaceChildren();const matches=findFeatures(search.value,cat);for(const f of matches){const card=button("",()=>change(()=>workspace(f)),"category-tool");card.dataset.tool=f.id;card.append(el("strong",f.title),el("small",f.description));items.append(card);}if(matchesRoi(search.value,cat)){const card=button("",()=>change(roiWorkspace),"category-tool");card.dataset.tool=ROI_TOOL.id;card.append(el("strong",ROI_TOOL.title),el("small",ROI_TOOL.description+" · Lokal"));items.append(card);}if(!items.children.length)items.append(el("p","Alat tidak ditemukan.","empty"));};
     search.addEventListener("input",draw);draw();
   }
   sideSearch.addEventListener("input",renderNavigation);
@@ -104,15 +105,43 @@ export async function mount({root,ai,version,revision="",signal}){
     groups.replaceChildren();
     const matches=findFeatures(sideSearch.value);
     for(const cat of CATEGORIES){
-      const tools=matches.filter(f=>f.category===cat);if(!tools.length)continue;
-      const details=el("details",null,"nav-category");details.open=!!sideSearch.value.trim()||opened.has(cat)||tools.some(f=>f.id===current?.id);
+      const tools=matches.filter(f=>f.category===cat);const roi=matchesRoi(sideSearch.value,cat);if(!tools.length&&!roi)continue;
+      const details=el("details",null,"nav-category");details.open=!!sideSearch.value.trim()||opened.has(cat)||tools.some(f=>f.id===current?.id)||(roi&&current?.id===ROI_TOOL.id);
       const summary=el("summary",cat);details.append(summary);
       details.addEventListener("toggle",()=>{if(!sideSearch.value.trim()){if(details.open)opened.add(cat);else opened.delete(cat);}});
       for(const f of tools){const item=button(f.title,()=>change(()=>workspace(f)),"nav-tool");item.setAttribute("aria-current",current?.id===f.id?"page":"false");details.append(item);}
+      if(roi){const item=button(ROI_TOOL.title,()=>change(roiWorkspace),"nav-tool");item.setAttribute("aria-current",current?.id===ROI_TOOL.id?"page":"false");details.append(item);}
       groups.append(details);
     }
-    if(!matches.length)groups.append(el("p","Alat tidak ditemukan.","empty"));
+    if(!matches.length&&!matchesRoi(sideSearch.value))groups.append(el("p","Alat tidak ditemukan.","empty"));
     setNav();
+  }
+  function roiWorkspace(){
+    page="tool";current=ROI_TOOL;slots=[];result=null;
+    const heading=el("div",null,"tool-heading");heading.append(button("‹ "+ROI_TOOL.category,()=>change(()=>categoryView(ROI_TOOL.category)),"tool-back"),el("h1",ROI_TOOL.title),el("p","Perhitungan lokal, tanpa kuota AI. Isi nominal Rupiah dengan angka saja."));
+    const layout=el("div",null,"layout"),form=el("form",null,"card input-panel"),output=el("section",null,"card roi-output");output.setAttribute("aria-live","polite");
+    const defs=[["price","Harga jual per pesanan","15000"],["cogs","HPP per pesanan","7000"],["extra","Biaya lain per pesanan (kemasan, fee, dll.)","1000"],["adSpend","Total biaya iklan","50000"],["orders","Jumlah pesanan dari iklan","10"]];
+    const fields={};
+    form.append(el("h2","1. Masukkan angka usaha"));
+    for(const [key,label,hint] of defs){const l=el("label",label);l.htmlFor="roi-"+key;const input=el("input");input.id=l.htmlFor;input.type="text";input.inputMode="numeric";input.pattern="[0-9]+";input.maxLength=12;input.required=true;input.placeholder="Contoh: "+hint;input.autocomplete="off";fields[key]=input;form.append(l,input);}
+    const submit=el("button","Hitung hasil","primary");submit.type="submit";const status=el("p",null,"status");status.setAttribute("role","status");
+    form.append(el("small","Isi 0 jika tidak ada biaya atau pesanan. Gunakan jumlah pesanan yang dapat diatribusikan ke iklan."),el("div",null,"actions"),status);form.querySelector(".actions").append(submit);
+    const disclaimer="Laba estimasi sebelum biaya tetap, pajak, retur dan biaya lain yang belum dimasukkan. Hasil bukan prediksi penjualan.";
+    output.append(el("h2","2. Hasil perhitungan"),el("p","Hasil muncul setelah angka dihitung."),el("small",disclaimer));
+    for(const input of Object.values(fields))input.addEventListener("input",()=>{status.textContent="";output.replaceChildren(el("h2","2. Hasil perhitungan"),el("p","Angka berubah. Hitung kembali."),el("small",disclaimer));});
+    form.addEventListener("submit",e=>{e.preventDefault();if(disposed||active)return;
+      try{
+        const r=calculateAds(Object.fromEntries(Object.entries(fields).map(([k,v])=>[k,v.value]))),rows=adsReport(r);
+        output.replaceChildren(el("h2","2. Hasil perhitungan"));
+        const metric=el("dl",null,"roi-metrics");for(const [label,value] of rows){const row=el("div");row.append(el("dt",label),el("dd",value));metric.append(row);}output.append(metric);
+        if(r.margin<=0)output.append(el("p","Margin per pesanan nol atau negatif. Evaluasi harga jual dan biaya.","quality-warn"));
+        if(r.orders===0)output.append(el("p","Belum ada pesanan. CPA belum dapat dihitung.","quality-warn"));
+        if(r.adSpend===0)output.append(el("p","Tidak ada biaya iklan. ROAS dan laba/biaya iklan tidak terdefinisi."));
+        output.append(el("small",disclaimer));status.textContent="Perhitungan selesai, tanpa permintaan AI.";
+        const text=el("textarea");text.value=rows.map(([k,v])=>k+": "+v).join("\n")+"\n\n"+disclaimer;text.readOnly=true;text.rows=6;text.setAttribute("aria-label","Ringkasan perhitungan");const copyStatus=el("small");copyStatus.setAttribute("role","status");const details=el("details");details.append(el("summary","Salin ringkasan"),text,button("Salin teks",async()=>{try{const mode=await copyResult(text);copyStatus.textContent=mode==="manual"?"Teks dipilih. Gunakan menu Salin.":"Teks disalin.";}catch{copyStatus.textContent="Salin teks secara manual.";}}),copyStatus);output.append(details);
+      }catch{status.textContent="Masukkan angka bulat yang valid. Harga jual minimal Rp1, biaya dan pesanan tidak boleh negatif.";output.replaceChildren(el("h2","2. Hasil perhitungan"),el("p","Periksa angka sebelum menghitung."));}
+    });
+    layout.append(form,output);view.replaceChildren(heading,layout);
   }
   function chatHome(){
     page="home";current=null;slots=[];result=null;
