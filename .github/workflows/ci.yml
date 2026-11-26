@@ -38,7 +38,7 @@ jobs:
 
   immutable-cdn:
     if: github.event_name == 'push' && github.ref == 'refs/heads/loader-hardening'
-    needs: test
+    # Independent diagnostic; a failed product gate still fails Studio CI.
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -46,7 +46,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Verify exact immutable application bytes before promotion
+      - name: Verify candidate immutable application bytes (independent of quality gate)
         run: node scripts/check-release.mjs --cdn
 
   pages-pointer-check:

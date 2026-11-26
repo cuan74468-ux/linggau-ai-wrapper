@@ -71,6 +71,25 @@ async function run(){
  btn(document,"Deteksi objek (AI lokal)").click();
  await wait(()=>document.querySelector(".input-panel .status").textContent.includes("Alat pemisah objek belum siap"),"mock model failure visible");
  assert(!btn(document,"Proses foto").disabled,"previous valid mask retained after failed redetection");
+ btn(document,"Pengaturan").click();
+ const regionButton=btn(document,"Batasi area produk"),maskCanvas=document.querySelector(".mask-canvas");
+ assert(regionButton&&!regionButton.hidden&&maskCanvas.clientWidth>0,"region correction visible for product");
+ function corner(x,y){const rect=maskCanvas.getBoundingClientRect();maskCanvas.dispatchEvent(new MouseEvent("click",{bubbles:true,clientX:rect.left+maskCanvas.clientLeft+x*maskCanvas.clientWidth,clientY:rect.top+maskCanvas.clientTop+y*maskCanvas.clientHeight}));}
+ regionButton.click();corner(.25,.20);
+ assert(document.querySelector(".mask-area").textContent.includes("Ketuk sudut yang berseberangan"),"first corner only prompts second");
+ corner(.26,.21);await wait(()=>document.querySelector(".input-panel .status").textContent.includes("Area terlalu kecil"),"small region refusal");
+ assert(!btn(document,"Tambah bagian objek").hidden,"failed region retains previous mask");
+ regionButton.click();corner(.20,.15);corner(.80,.85);
+ await wait(()=>document.querySelector(".input-panel .status").textContent==="Objek terdeteksi.","two-corner region correction");
+ assert(!btn(document,"Tambah bagian objek").hidden&&!btn(document,"Hapus sisa latar").hidden,"manual brush remains available");
+ assert(document.documentElement.scrollWidth<=window.innerWidth+1,"region correction mobile overflow");
+ btn(document,"Proses foto").click();await wait(()=>btn(document,"Tidak sesuai"),"region result review");
+ assert(calls===0&&!btn(document,"Unduh gambar"),"local region no AI or unreviewed download");
+ btn(document,"Tidak sesuai").click();
+ await wait(()=>btn(document,"Perbaiki objek"),"region rejection");
+ btn(document,"Perbaiki objek").click();
+ assert(document.querySelector(".precision-correction").open,"region review returns to correction");
+ const subject=document.querySelector("#subject-kind");subject.value="person";subject.dispatchEvent(new Event("change"));assert(regionButton.hidden,"region only available for objects");
  openTool("Editor & Manipulasi Visual","background");
  const portraitInput=document.querySelector("#photo-0"),portraitTransfer=new DataTransfer();portraitTransfer.items.add(new File([opaqueBlob],"portrait-fixture.png",{type:"image/png"}));portraitInput.files=portraitTransfer.files;portraitInput.dispatchEvent(new Event("change",{bubbles:true}));
  await wait(()=>document.querySelector(".mask-area")?.textContent.includes("Siap deteksi otomatis"),"portrait fixture ready");
@@ -111,7 +130,7 @@ async function run(){
   assert(copyCalls.join(" ").includes("BAKSO LEN Rp15.000!")&&copyCalls.join(" ").includes("Pesan sekarang"),"literal headline and CTA drawn");
   assert(calls===1,"one backdrop request only");const picture=await img(out);assert(picture.naturalWidth===1280&&picture.naturalHeight===1600,"PNG decodes");
  }finally{CanvasRenderingContext2D.prototype.fillText=originalFill;}
- window.__smoke={ok:true,detail:"12MP working-photo resize and alpha preservation, PNG round-trip, local sharpen, 360px workspace, alpha upload, review, product mode and automatic opaque input workflow, asset chaining, inline clear confirmation, literal poster overlay, local advertising calculator, all 41 mobile workspaces and mocked vision failure feedback passed"};
+ window.__smoke={ok:true,detail:"12MP working-photo resize and alpha preservation, PNG round-trip, local sharpen, 360px workspace, alpha upload, review, product mode and automatic opaque input workflow, asset chaining, inline clear confirmation, literal poster overlay, local advertising calculator, all 41 mobile workspaces, two-corner region correction, rejection and mocked vision failure feedback passed"};
 }
 run().catch(e=>{window.__smoke={ok:false,detail:(e.stack||String(e))+" | status: "+document.querySelector(".input-panel .status")?.textContent+" | output: "+document.querySelector(".output-panel")?.textContent?.slice(0,400)}});
 </script></body></html>

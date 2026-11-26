@@ -225,7 +225,7 @@ export async function mount({root,ai,version,revision="",signal}){
   function workspace(f,initial=null,initialIndex=0){
     page="tool";current=f;slots=f.slots.map(()=>null);result=null;
     const epoch=viewEpoch;let loading=0;const revisions=f.slots.map(()=>0);const values={};const inputs=[];const radios=new Map();const fieldGroups=new Map();
-    const localSharpen=f.id==="sharpen",precisionSupported=supportsPrecision(f.id),primaryIds=primaryFieldIds(f);let precision=precisionSupported,points=[],maskSource=undefined,maskCanvas=null,maskImage=null,maskControls=[],useAlpha=false,transparent=false,alphaAvailable=false,drawMode=false,visionMask=null,visionBusy=false,brushMode=0,shadow=false,subjectKind=["background","formal-photo"].includes(f.id)?"person":"object",autoDetect=null,regionControl=null;
+    const localSharpen=f.id==="sharpen",precisionSupported=supportsPrecision(f.id),primaryIds=primaryFieldIds(f);let precision=precisionSupported,points=[],maskSource=undefined,maskCanvas=null,maskImage=null,maskControls=[],useAlpha=false,transparent=false,alphaAvailable=false,drawMode=false,visionMask=null,visionBusy=false,brushMode=0,shadow=false,subjectKind=["background","formal-photo"].includes(f.id)?"person":"object",autoDetect=null,regionControl=null,cancelRegion=null;
     const heading=el("div",null,"tool-heading");const back=button("‹ "+f.category,()=>change(()=>categoryView(f.category)),"tool-back");heading.append(back,el("h1",f.title),el("p",f.description));view.replaceChildren(heading);
     const layout=el("div",null,"layout"), form=el("section",null,"card input-panel"), output=el("section",null,"card output-panel");
     form.id="studio-input";output.id="studio-output";
@@ -273,12 +273,12 @@ export async function mount({root,ai,version,revision="",signal}){
       const mode=el("select");mode.id="precision-mode";for(const [v,t] of [["strict","Pertahankan objek asli"],["ai","Ubah tampilan dengan AI (detail dapat berubah)"]]){const o=el("option",t);o.value=v;mode.append(o);}
       const modeInfo=el("small","Foto tidak dikirim ke Gemini dalam mode ini. Latar khusus mungkin membutuhkan AI.");
       const explanation=el("small","Beta: pemisahan otomatis dapat keliru pada latar rumit. Periksa hasil sebelum menggunakannya.");
-      const subjectLabel=el("label","Isi foto");subjectLabel.htmlFor="subject-kind";const subject=el("select");subject.id="subject-kind";for(const [value,label] of [["person","Orang / potret"],["object","Produk / makanan / benda"]]){const opt=el("option",label);opt.value=value;subject.append(opt);}subject.value=subjectKind;subject.addEventListener("change",()=>{subjectKind=subject.value;visionMask=null;points=[];status.textContent="Jenis foto diubah. Deteksi akan dijalankan saat proses.";drawMask();refresh();});inputs.push(subject);
+      const subjectLabel=el("label","Isi foto");subjectLabel.htmlFor="subject-kind";const subject=el("select");subject.id="subject-kind";for(const [value,label] of [["person","Orang / potret"],["object","Produk / makanan / benda"]]){const opt=el("option",label);opt.value=value;subject.append(opt);}subject.value=subjectKind;subject.addEventListener("change",()=>{subjectKind=subject.value;cancelRegion?.();visionMask=null;points=[];status.textContent="Jenis foto diubah. Deteksi akan dijalankan saat proses.";drawMask();refresh();});inputs.push(subject);
       const transparentLabel=el("label",null,"precision-option"),transparentBox=el("input");transparentBox.type="checkbox";transparentLabel.append(transparentBox,el("span","Hapus latar (PNG transparan)"));transparentBox.addEventListener("change",()=>{transparent=transparentBox.checked;refresh();});inputs.push(transparentBox);
       const shadowLabel=el("label",null,"precision-option"),shadowBox=el("input");shadowBox.type="checkbox";shadowLabel.append(shadowBox,el("span","Tambahkan bayangan di bawah objek"));shadowBox.addEventListener("change",()=>{shadow=shadowBox.checked;refresh();});inputs.push(shadowBox);
       transparentBox.addEventListener("change",()=>{shadowLabel.hidden=transparent;});
       precisionPanel.append(subjectLabel,subject,explanation,transparentLabel);advanced.append(shadowLabel,correction);
-      mode.addEventListener("change",()=>{precision=mode.value==="strict";precisionPanel.hidden=!precision;shadowLabel.hidden=!precision||transparent;correction.hidden=!precision;modeInfo.textContent=precision?"Foto tidak dikirim ke Gemini dalam mode ini. Latar khusus mungkin membutuhkan AI.":"Foto dikirim ke Gemini. Wajah, kemasan, tulisan dan detail dapat berubah.";presetPicker.value="";refresh();});
+      mode.addEventListener("change",()=>{precision=mode.value==="strict";cancelRegion?.();precisionPanel.hidden=!precision;shadowLabel.hidden=!precision||transparent;correction.hidden=!precision;modeInfo.textContent=precision?"Foto tidak dikirim ke Gemini dalam mode ini. Latar khusus mungkin membutuhkan AI.":"Foto dikirim ke Gemini. Wajah, kemasan, tulisan dan detail dapat berubah.";presetPicker.value="";refresh();});
       modeArea.append(modeLabel,mode,modeInfo);inputs.push(mode);
     }
     function drawMask(){
@@ -290,13 +290,13 @@ export async function mount({root,ai,version,revision="",signal}){
     }
     function syncMask(){
       if(!precisionSupported||maskSource===slots[0])return;
-      maskSource=slots[0];autoDetect=null;regionControl=null;correction.open=false;points=[];visionMask=null;brushMode=0;useAlpha=false;alphaAvailable=false;drawMode=false;maskImage=null;maskCanvas=null;maskControls=[];maskArea.replaceChildren();
+      maskSource=slots[0];autoDetect=null;regionControl=null;cancelRegion=null;correction.open=false;points=[];visionMask=null;brushMode=0;useAlpha=false;alphaAvailable=false;drawMode=false;maskImage=null;maskCanvas=null;maskControls=[];maskArea.replaceChildren();
       if(!maskSource){maskArea.append(el("small","Unggah foto untuk menandai objek."));return;}
       const source=maskSource,canvas=el("canvas",null,"mask-canvas"),img=new Image();maskCanvas=canvas;
       canvas.setAttribute("aria-label","Ketuk titik mengelilingi objek yang ingin dipertahankan");
       const count=el("small","Siap deteksi objek");count.setAttribute("role","status");count.setAttribute("aria-live","polite");
       const detect=button("Deteksi objek (AI lokal)",()=>detectAt({x:.5,y:.5}),"primary");
-      let pickPoint=false,regionPicking=false,regionFirst=null;const pick=button("Pilih titik objek",()=>{if(active||visionBusy)return;regionPicking=false;regionFirst=null;pickPoint=true;drawMode=false;setBrush(0);count.textContent="Ketuk bagian tengah objek yang ingin dipertahankan.";});
+      let pickPoint=false,regionPicking=false,regionFirst=null;cancelRegion=()=>{regionPicking=false;regionFirst=null;pickPoint=false;};const pick=button("Pilih titik objek",()=>{if(active||visionBusy)return;regionPicking=false;regionFirst=null;pickPoint=true;drawMode=false;setBrush(0);count.textContent="Ketuk bagian tengah objek yang ingin dipertahankan.";});
        const region=button("Batasi area produk",()=>{if(active||visionBusy||subjectKind!=="object")return;pickPoint=false;drawMode=false;setBrush(0);regionPicking=true;regionFirst=null;count.textContent="Ketuk satu sudut area produk, lalu sudut yang berseberangan. Beri sedikit ruang di sekitarnya.";});regionControl=region;
       const plus=button("Tambah bagian objek",()=>setBrush(1)),minus=button("Hapus sisa latar",()=>setBrush(-1));plus.hidden=minus.hidden=true;
       function setBrush(m){if(m){regionPicking=false;regionFirst=null;pickPoint=false;}brushMode=m;canvas.style.touchAction=m?"none":"manipulation";plus.setAttribute("aria-pressed",String(m===1));minus.setAttribute("aria-pressed",String(m===-1));}
