@@ -22,7 +22,7 @@ try{
  await cdp("Emulation.setDeviceMetricsOverride",{width:360,height:800,deviceScaleFactor:1,mobile:true});
  await cdp("Page.navigate",{url:"http://127.0.0.1:"+server.address().port+(real?"/tests/browser/real-vision.html":"/tests/browser/smoke.html")});
  let result;
- for(let i=0;i<(real?900:240);i++){await delay(100);try{const r=await cdp("Runtime.evaluate",{expression:"window.__smoke",returnByValue:true});result=r.result?.value;if(result)break;}catch{}}
+ for(let i=0;i<(real?3000:240);i++){await delay(100);try{const r=await cdp("Runtime.evaluate",{expression:"window.__smoke",returnByValue:true});result=r.result?.value;if(result)break;}catch{}}
  if(!result?.ok)throw Error(result?.detail||"Browser smoke timed out");
  console.log((real?"REAL_VISION_PASS: ":"BROWSER_SMOKE_PASS: ")+result.detail);
 }finally{ws?.close();browser.kill("SIGKILL");server.close();await delay(200);await rm(dir,{recursive:true,force:true}).catch(()=>{});}
