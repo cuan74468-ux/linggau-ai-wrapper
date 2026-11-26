@@ -7,10 +7,19 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test prototypes/studio-licensing/*.test.mjs
+      - name: Install exact build-only minifier without lifecycle scripts
+        run: npm install --prefix "$RUNNER_TEMP/studio-minifier" --ignore-scripts --no-audit --no-fund --no-save terser@5.39.0
+      - name: Test license client and shell packaging
+        env:
+          STUDIO_MINIFIER_DIR: ${{ runner.temp }}/studio-minifier
+        run: node --test prototypes/studio-licensing/*.test.mjs
+      - name: Generate temporary shell only (not published or licensed)
+        env:
+          STUDIO_MINIFIER_DIR: ${{ runner.temp }}/studio-minifier
+        run: node prototypes/studio-licensing/minify-shell.mjs canvas/shell.html "$RUNNER_TEMP/shell.min.html"
