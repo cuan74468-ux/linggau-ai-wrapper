@@ -23,7 +23,8 @@ async function run(){
  const nav=document.querySelector("#studio .mobile-rail");
  await wait(()=>nav.clientWidth>0&&getComputedStyle(nav).overflowX==="auto","mobile stylesheet ready: "+window.innerWidth);
  assert(nav.scrollWidth>nav.clientWidth,"scrollable rail: "+nav.scrollWidth+"/"+nav.clientWidth+" viewport "+window.innerWidth);
- const background=nav.querySelector('[aria-label="Ubah Background"]');assert(background,"background tool");background.click();
+ const openTool=(category,id)=>{const cat=nav.querySelector('[aria-label="'+category+'"]');assert(cat,"category "+category);cat.click();const tool=document.querySelector('[data-tool="'+id+'"]');assert(tool,"tool "+id);tool.click();};
+ openTool("Editor & Manipulasi Visual","background");
  const input=document.querySelector("#photo-0");
  const blob=await new Promise(r=>sample.toBlob(r,"image/png"));const transfer=new DataTransfer();transfer.items.add(new File([blob],"synthetic.png",{type:"image/png"}));input.files=transfer.files;input.dispatchEvent(new Event("change",{bubbles:true}));
  await wait(()=>document.querySelector(".mask-area")?.textContent.includes("Transparansi foto aktif"),"alpha input");
@@ -34,10 +35,11 @@ async function run(){
  await wait(()=>btn(document,"Unduh gambar"),"accepted result");
  assert(calls===0,"local export must use zero AI calls");
  assert(document.documentElement.scrollWidth<=window.innerWidth+1,"360px overflow");
- nav.querySelector('[aria-label="Foto Produk Profesional"]').click();
+ openTool("Studio Foto & Model AI","product-photo");
  assert(document.querySelector("#precision-mode").value==="strict","product defaults to precision");
  assert(document.querySelector("#param-notes").parentElement.hidden,"hidden unsupported notes");
- assert(document.querySelectorAll(".mobile-item").length===42,"all tools remain accessible");
+ assert(document.querySelectorAll(".mobile-item").length===10,"7 categories plus assistant, search, results");
+ assert(!document.querySelector(".advanced-settings").open,"advanced settings collapsed");
  // Opaque input and vision fixture: browser dialogs must not be required.
  const opaque=document.createElement("canvas");opaque.width=80;opaque.height=100;const o=opaque.getContext("2d");o.fillStyle="#ccc";o.fillRect(0,0,80,100);o.drawImage(sample,0,0);
  const opaqueBlob=await new Promise(r=>opaque.toBlob(r,"image/png"));const dt=new DataTransfer();dt.items.add(new File([opaqueBlob],"opaque.png",{type:"image/png"}));const fi=document.querySelector("#photo-0");fi.files=dt.files;fi.dispatchEvent(new Event("change",{bubbles:true}));
@@ -51,10 +53,11 @@ async function run(){
  assert(calls===0,"solid background uses no Gemini");
  btn(document,"Sesuai, gunakan").click();
  await wait(()=>btn(document,"Unduh gambar"),"auto output accepted");
- document.querySelector(".precision-correction").open=true;
+ document.querySelector(".advanced-settings").open=true;document.querySelector(".precision-correction").open=true;
  btn(document,"Deteksi objek (AI lokal)").click();
- await wait(()=>document.querySelector(".input-panel .status").textContent.includes("Model atau WASM"),"mock model failure visible");
+ await wait(()=>document.querySelector(".input-panel .status").textContent.includes("Alat pemisah objek belum siap"),"mock model failure visible");
  assert(!btn(document,"Proses foto").disabled,"previous valid mask retained after failed redetection");
+ nav.querySelector('[aria-label="Cari alat"]').click();const search=document.querySelector('input[aria-label="Cari alat"]');assert(document.querySelectorAll(".category-tool").length===40,"all 40 tools discoverable");search.value="rubrik";search.dispatchEvent(new Event("input",{bubbles:true}));assert(document.querySelectorAll(".category-tool").length===1,"search finds education tool");document.querySelector(".category-tool").click();assert(document.querySelector(".required-fields #param-learningTopic"),"essential brief visible");assert(!document.querySelector(".advanced-settings").open,"text advanced collapsed");assert(document.documentElement.scrollWidth<=window.innerWidth+1,"education 360px overflow");
  window.__smoke={ok:true,detail:"PNG round-trip, local sharpen, 360px workspace, alpha upload, review, product mode and automatic opaque input workflow and mocked vision failure feedback passed"};
 }
 run().catch(e=>{window.__smoke={ok:false,detail:(e.stack||String(e))+" | status: "+document.querySelector(".input-panel .status")?.textContent+" | output: "+document.querySelector(".output-panel")?.textContent?.slice(0,400)}});

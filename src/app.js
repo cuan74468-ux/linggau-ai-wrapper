@@ -5,6 +5,7 @@ import { readImage, decodeImage } from "./core/images.js";
 import {assessOutput} from "./core/quality.js";
 import {supportsPrecision,backdropPlan,sharpenLocal,prepareCutout,composeCutout} from "./core/local-image.js";
 import {validPolygon} from "./core/pixels.js";
+import {processingRoute,primaryFieldIds} from "./core/processing-router.js";
 import {validateMask,brushMask} from "./core/vision-mask.js";
 import {needsReferenceReview,createReferenceReview} from "./core/reference-review.js";
 import {validatePresets,applyPreset} from "./core/presets.js";
@@ -47,7 +48,7 @@ export async function mount({root,ai,version,revision="",signal}){
   const brand=el("div",null,"brand");
   const mark=el("img",null,"brandmark");mark.alt="";mark.src=new URL("./assets/linggau-mark.svg",import.meta.url).href;brand.append(mark);
   const identity=el("div");identity.append(el("strong","Linggau AI Studio"),el("small","Workspace kreatif · v"+version+(revision?" · "+revision.slice(0,7):"")));brand.append(identity);
-  const ready=el("small",client.available().imageToImage?"Mesin AI tersedia · akses diuji saat proses":"Mesin AI tidak terhubung","bridge-status");
+  const ready=el("small",client.available().imageToImage?"Siap digunakan":"Sebagian fitur memerlukan koneksi AI","bridge-status");
   top.append(brand,ready);
   const sidebar=el("aside",null,"sidebar");sidebar.id="studio-sidebar";
   const nav=el("nav",null,"nav");nav.setAttribute("aria-label","Seluruh alat AI");
@@ -59,7 +60,7 @@ export async function mount({root,ai,version,revision="",signal}){
   const mobileRail=el("div",null,"mobile-rail");mobileRail.setAttribute("aria-label","Geser mendatar untuk memilih alat");
   mobileBar.append(mobileRail);
   studio.append(top,frame,mobileBar);root.replaceChildren(css,studio);
-  let active=false, disposed=false, viewEpoch=0, current=null, slots=[], result=null, page="home";
+  let active=false, disposed=false, viewEpoch=0, current=null, slots=[], result=null, page="home",activeCategory="all";
   const tell=t=>{global.textContent=t;global.hidden=!t;};
   const compact=window.matchMedia("(max-width: 700px)");
   function setNav(){for(const b of studio.querySelectorAll(".nav button, .nav input, .mobile-bar button"))b.disabled=active;}
@@ -72,17 +73,26 @@ export async function mount({root,ai,version,revision="",signal}){
   const opened=new Set([CATEGORIES[0]]);
   nav.append(home,recent,sideSearch,groups,clear);
   const mobileButtons=new Map();
-  const shortNames={"product-photo":"Foto produk","food-photo":"Foto makanan","ai-model":"Model AI","virtual-try-on":"Try-On","formal-photo":"Foto formal","product-mockup":"Mockup","background":"Background","sharpen":"Pertajam","restore":"Restorasi","poster":"Poster & banner","logo":"Logo","thumbnail":"Thumbnail","seo-caption":"SEO & caption","tiktok-ideas":"Ide TikTok","ad-script":"Naskah iklan","content-calendar":"Kalender","lesson-module":"Modul ajar","quiz-rubric":"Soal & rubrik","education-visual":"Ilustrasi kelas","learning-explainer":"Peringkas","news-article":"Artikel berita","news-headline":"Headline","editorial-image":"Ilustrasi berita","avatar-style":"Avatar","miniature-world":"Miniatur","comic-strip":"Komik","creative-writing":"Lirik & cerita","sketch-catalog":"Sketsa","studio-review":"Review produk","photo-booth":"Photo booth","portrait-aesthetic":"Foto estetik","hair-style":"Gaya rambut","expression-edit":"Ekspresi","vehicle-custom":"Modifikasi","podcast-studio":"Podcast","object-eraser":"Hapus objek","outpaint":"Perluas foto","id-photo-color":"Pas foto","angle-edit":"Ganti angle","style-match":"Samakan gaya"};
+  const categoryNames=["Foto","Editor","Desain","Bisnis","Edukasi","Media","Kreatif"];
   function mobileItem(id,label,full,action){const b=button(label,()=>change(action),"mobile-item");b.setAttribute("aria-label",full);b.title=full;mobileButtons.set(id,b);mobileRail.append(b);}
-  mobileItem("home","Asisten AI","Asisten AI",chatHome);mobileItem("history","Aset sesi","Aset sesi",history);
-  for(const cat of CATEGORIES)for(const f of findFeatures("",cat))mobileItem(f.id,shortNames[f.id]||f.title,f.title,()=>workspace(f));
+  mobileItem("home","Asisten","Asisten AI",chatHome);
+  mobileItem("search","Cari","Cari alat",()=>categoryView("all"));
+  for(const [i,cat] of CATEGORIES.entries())mobileItem(cat,categoryNames[i]||cat,cat,()=>categoryView(cat));
+  mobileItem("history","Hasil","Aset sesi",history);
+  function categoryView(cat){
+    page="category";current=null;slots=[];result=null;activeCategory=cat;
+    const h=el("h1",cat==="all"?"Cari alat":cat),search=el("input");search.type="search";search.placeholder="Cari alat…";search.setAttribute("aria-label","Cari alat");
+    const items=el("div",null,"category-tools");view.replaceChildren(h,search,items);
+    const draw=()=>{items.replaceChildren();const matches=findFeatures(search.value,cat);for(const f of matches){const card=button("",()=>change(()=>workspace(f)),"category-tool");card.dataset.tool=f.id;card.append(el("strong",f.title),el("small",f.description));items.append(card);}if(!matches.length)items.append(el("p","Alat tidak ditemukan.","empty"));};
+    search.addEventListener("input",draw);draw();
+  }
   sideSearch.addEventListener("input",renderNavigation);
   function renderNavigation(){
     home.setAttribute("aria-current",page==="home"?"page":"false");
     recent.setAttribute("aria-current",page==="history"?"page":"false");
     recent.textContent="Aset sesi ("+store.list().length+")";
-    for(const [id,b] of mobileButtons)b.setAttribute("aria-current",id===(page==="tool"?current?.id:page)?"page":"false");
-    mobileButtons.get("history").textContent="Aset ("+store.list().length+")";
+    for(const [id,b] of mobileButtons)b.setAttribute("aria-current",id===(page==="tool"?current?.category:page==="category"?(activeCategory==="all"?"search":activeCategory):page)?"page":"false");
+    mobileButtons.get("history").textContent="Hasil ("+store.list().length+")";
     groups.replaceChildren();
     const matches=findFeatures(sideSearch.value);
     for(const cat of CATEGORIES){
@@ -125,8 +135,8 @@ export async function mount({root,ai,version,revision="",signal}){
     form.addEventListener("submit",async e=>{
       e.preventDefault();if(active||!field.value.trim()||!client.available().textToText)return;
       const input=field.value.trim();active=true;status.textContent="Mengirim satu permintaan…";refreshChat();
-      try{const res=await client.chat(conversation.prompt(input));if(disposed||signal?.aborted)return;conversation.append(input,res.text);field.value="";draw();status.textContent="";ready.textContent="Mesin AI · permintaan terakhir berhasil";}
-      catch(e){status.textContent=friendlyError(e);ready.textContent="Mesin AI · permintaan terakhir gagal";}
+      try{const res=await client.chat(conversation.prompt(input));if(disposed||signal?.aborted)return;conversation.append(input,res.text);field.value="";draw();status.textContent="";ready.textContent="Siap digunakan";}
+      catch(e){status.textContent=friendlyError(e);ready.textContent="Proses belum berhasil";}
       finally{active=false;if(!disposed){refreshChat();if(!compact.matches)field.focus();}}
     });
     draw();refreshChat();
@@ -178,15 +188,16 @@ export async function mount({root,ai,version,revision="",signal}){
   function workspace(f,initial=null,initialIndex=0){
     page="tool";current=f;slots=f.slots.map(()=>null);result=null;if(initial)slots[initialIndex]=initial;
     const epoch=viewEpoch;let loading=0;const revisions=f.slots.map(()=>0);const values={};const inputs=[];const radios=new Map();const fieldGroups=new Map();
-    const localSharpen=f.id==="sharpen",precisionSupported=supportsPrecision(f.id);let precision=precisionSupported,points=[],maskSource=undefined,maskCanvas=null,maskImage=null,maskControls=[],useAlpha=false,transparent=false,alphaAvailable=false,drawMode=false,visionMask=null,visionBusy=false,brushMode=0,shadow=false,subjectKind=["background","formal-photo"].includes(f.id)?"person":"object",autoDetect=null;
-    const heading=el("div",null,"tool-heading");heading.append(el("small",f.category),el("h1",f.title),el("p",f.description));view.replaceChildren(heading);
+    const localSharpen=f.id==="sharpen",precisionSupported=supportsPrecision(f.id),primaryIds=primaryFieldIds(f);let precision=precisionSupported,points=[],maskSource=undefined,maskCanvas=null,maskImage=null,maskControls=[],useAlpha=false,transparent=false,alphaAvailable=false,drawMode=false,visionMask=null,visionBusy=false,brushMode=0,shadow=false,subjectKind=["background","formal-photo"].includes(f.id)?"person":"object",autoDetect=null;
+    const heading=el("div",null,"tool-heading");const back=button("‹ "+f.category,()=>change(()=>categoryView(f.category)),"tool-back");heading.append(back,el("h1",f.title),el("p",f.description));view.replaceChildren(heading);
     const layout=el("div",null,"layout"), form=el("section",null,"card input-panel"), output=el("section",null,"card output-panel");
     form.id="studio-input";output.id="studio-output";
     const tabs=el("div",null,"workspace-tabs");const editTab=button("Pengaturan",()=>showPane("input"),"pane-tab");const resultTab=button("Hasil",()=>showPane("output"),"pane-tab");
     editTab.setAttribute("aria-controls",form.id);resultTab.setAttribute("aria-controls",output.id);tabs.append(editTab,resultTab);view.append(tabs);
     function showPane(pane){layout.dataset.pane=pane;editTab.setAttribute("aria-pressed",String(pane==="input"));resultTab.setAttribute("aria-pressed",String(pane==="output"));}
     showPane("input");
-    form.append(el("h2",f.slots.length?"1. Foto referensi":"1. Brief & pengaturan"));
+    form.append(el("h2",f.slots.length?"1. Masukkan foto":"1. Isi kebutuhan Anda"));
+    const requiredArea=el("div",null,"required-fields"),mainArea=el("div",null,"main-fields"),advanced=el("details",null,"advanced-settings");advanced.append(el("summary","Pengaturan lanjutan"));if(!f.slots.length)form.append(requiredArea);
     
     const status=el("p","Siap menerima input.","status");status.setAttribute("role","status");
     const blocker=el("p",null,"process-blocker");blocker.setAttribute("role","status");blocker.id="process-blocker";
@@ -203,7 +214,7 @@ export async function mount({root,ai,version,revision="",signal}){
         available=false;
         if(!reason){
           if(!maskImage)reason="Foto sedang disiapkan.";
-          else{try{const plan=backdropPlan({...values,transparent});available=!!plan.color||!!plan.transparent||client.available().textToImage;if(!available)reason="Mesin pembuat latar tidak tersedia. Pilih putih, beige, atau PNG transparan.";}catch(e){reason=String(e.message).includes("BACKGROUND_UNCHANGED")?"Pilih latar baru atau PNG transparan.":"Periksa pengaturan latar.";} }
+          else{try{const route=processingRoute(f,true,{...values,transparent});available=!route.needsAI||client.available().textToImage;if(!available)reason="Mesin pembuat latar tidak tersedia. Pilih putih, beige, atau PNG transparan.";}catch(e){reason=String(e.message).includes("BACKGROUND_UNCHANGED")?"Pilih latar baru atau PNG transparan.":"Periksa pengaturan latar.";} }
         }
       }
       if(!reason&&f.fields.some(p=>p.required&&(!precision||(!transparent&&p.id==="sceneBrief"))&&!String(values[p.id]||"").trim()))reason="Lengkapi kolom wajib.";
@@ -214,21 +225,21 @@ export async function mount({root,ai,version,revision="",signal}){
       inputs.forEach(x=>x.disabled=disabled);maskControls.forEach(x=>x.disabled=disabled);
       if(maskCanvas)maskCanvas.style.pointerEvents=disabled?"none":"auto";
       for(const [id,group] of fieldGroups)group.hidden=(precision&&(transparent||!["background","customBackground","sceneBrief"].includes(id)))||(localSharpen&&id==="notes");
-      run.textContent=active?"Sedang memproses…":localSharpen||precision?"Proses foto":"Proses AI";setNav();
+      run.textContent=active?"Sedang memproses…":f.engine==="text-to-text"?"Buat teks":"Proses foto";setNav();
     }
     const precisionPanel=el("section",null,"precision-panel");
     const maskArea=el("div",null,"mask-area");const correction=el("details",null,"precision-correction");correction.append(el("summary","Koreksi objek (opsional)"),maskArea);
     if(precisionSupported){
-      const modeLabel=el("label","Metode edit");modeLabel.htmlFor="precision-mode";
-      const mode=el("select");mode.id="precision-mode";for(const [v,t] of [["strict","Presisi objek"],["ai","Edit generatif (wajah dapat berubah)"]]){const o=el("option",t);o.value=v;mode.append(o);}
-      const explanation=el("small","Objek asli dipertahankan, latar diganti. Deteksi berjalan otomatis saat foto diproses. Maks. 4 megapiksel.");
+      const modeLabel=el("label","Cara mengedit");modeLabel.htmlFor="precision-mode";
+      const mode=el("select");mode.id="precision-mode";for(const [v,t] of [["strict","Pertahankan objek asli"],["ai","Ubah tampilan dengan AI (detail dapat berubah)"]]){const o=el("option",t);o.value=v;mode.append(o);}
+      const explanation=el("small","Foto asli dipertahankan pada bagian yang terdeteksi. Pilih latar lalu buat foto.");
       const subjectLabel=el("label","Isi foto");subjectLabel.htmlFor="subject-kind";const subject=el("select");subject.id="subject-kind";for(const [value,label] of [["person","Orang / potret"],["object","Produk / makanan / benda"]]){const opt=el("option",label);opt.value=value;subject.append(opt);}subject.value=subjectKind;subject.addEventListener("change",()=>{subjectKind=subject.value;visionMask=null;points=[];status.textContent="Jenis foto diubah. Deteksi akan dijalankan saat proses.";drawMask();refresh();});inputs.push(subject);
-      const transparentLabel=el("label",null,"precision-option"),transparentBox=el("input");transparentBox.type="checkbox";transparentLabel.append(transparentBox,el("span","Ekspor objek saja (PNG transparan)"));transparentBox.addEventListener("change",()=>{transparent=transparentBox.checked;refresh();});inputs.push(transparentBox);
-      const shadowLabel=el("label",null,"precision-option"),shadowBox=el("input");shadowBox.type="checkbox";shadowLabel.append(shadowBox,el("span","Bayangan kontak (objek di atas permukaan)"));shadowBox.addEventListener("change",()=>{shadow=shadowBox.checked;refresh();});inputs.push(shadowBox);
+      const transparentLabel=el("label",null,"precision-option"),transparentBox=el("input");transparentBox.type="checkbox";transparentLabel.append(transparentBox,el("span","Hapus latar (PNG transparan)"));transparentBox.addEventListener("change",()=>{transparent=transparentBox.checked;refresh();});inputs.push(transparentBox);
+      const shadowLabel=el("label",null,"precision-option"),shadowBox=el("input");shadowBox.type="checkbox";shadowLabel.append(shadowBox,el("span","Tambahkan bayangan di bawah objek"));shadowBox.addEventListener("change",()=>{shadow=shadowBox.checked;refresh();});inputs.push(shadowBox);
       transparentBox.addEventListener("change",()=>{shadowLabel.hidden=transparent;});
-      precisionPanel.append(subjectLabel,subject,explanation,transparentLabel,shadowLabel,correction);
-      mode.addEventListener("change",()=>{precision=mode.value==="strict";precisionPanel.hidden=!precision;presetPicker.value="";refresh();});
-      form.append(modeLabel,mode);inputs.push(mode);
+      precisionPanel.append(subjectLabel,subject,explanation,transparentLabel);advanced.append(shadowLabel,correction);
+      mode.addEventListener("change",()=>{precision=mode.value==="strict";precisionPanel.hidden=!precision;shadowLabel.hidden=!precision||transparent;correction.hidden=!precision;presetPicker.value="";refresh();});
+      advanced.prepend(modeLabel,mode);inputs.push(mode);
     }
     function drawMask(){
       if(!maskCanvas||!maskImage)return;const ctx=maskCanvas.getContext("2d");if(!ctx)return;
@@ -250,7 +261,7 @@ export async function mount({root,ai,version,revision="",signal}){
       function setBrush(m){brushMode=m;canvas.style.touchAction=m?"none":"manipulation";plus.setAttribute("aria-pressed",String(m===1));minus.setAttribute("aria-pressed",String(m===-1));}
       async function detectAt(point,automatic=false){
         if((active&&!automatic)||visionBusy||!maskImage||epoch!==viewEpoch)return false;
-        visionBusy=true;count.textContent="Memuat model dan mendeteksi objek…";status.textContent="Deteksi objek sedang berjalan.";refresh();
+        visionBusy=true;count.textContent="Memuat model dan mendeteksi objek…";status.textContent="Memisahkan objek dari latar…";refresh();
         try{
           const {segmentObject,segmentPerson}=await import("./core/vision.js");
           const input=document.createElement("canvas");input.width=canvas.width;input.height=canvas.height;input.getContext("2d").drawImage(maskImage,0,0,input.width,input.height);
@@ -261,8 +272,8 @@ export async function mount({root,ai,version,revision="",signal}){
         }catch(e){
           if(epoch===viewEpoch&&maskSource===source){
             const code=String(e?.message||"");
-            const explanation=code.includes("VISION_TIMEOUT")?"Waktu pemuatan model habis.":code.includes("VISION_BUSY")?"Model masih memuat.":code.includes("MASK_TOO_SMALL")?"Bagian yang ditemukan terlalu kecil.":code.includes("MASK_AREA_INVALID")||code.includes("VISION_MASK_UNAVAILABLE")?"Objek belum ditemukan.":code.includes("VISION_LIBRARY_LOAD")?"Pustaka segmentasi tidak dapat dimuat.":code.includes("VISION_MODEL_LOAD")?"Model atau WASM tidak dapat dimuat.":"Deteksi tidak tersedia pada sesi ini.";
-            const message=explanation+(visionMask?" Mask sebelumnya tetap tersedia.":" Gunakan Pilih titik objek atau penandaan manual.");
+            const explanation=code.includes("VISION_TIMEOUT")?"Waktu pemuatan model habis.":code.includes("VISION_BUSY")?"Model masih memuat.":code.includes("MASK_TOO_SMALL")?"Bagian yang ditemukan terlalu kecil.":code.includes("MASK_AREA_INVALID")||code.includes("VISION_MASK_UNAVAILABLE")?"Objek belum ditemukan.":code.includes("VISION_LIBRARY_LOAD")?"Alat pemisah objek belum bisa dimuat.":code.includes("VISION_MODEL_LOAD")?"Alat pemisah objek belum siap.":"Deteksi tidak tersedia pada sesi ini.";
+            const message=explanation+(visionMask?" Pilihan objek sebelumnya tetap tersedia.":" Coba lagi atau buka koreksi objek.");
             count.textContent=message;status.textContent=message;correction.open=true;
           }
           return false;
@@ -303,16 +314,17 @@ export async function mount({root,ai,version,revision="",signal}){
       picker.addEventListener("change",()=>{if(active)return;++revisions[i];slots[i]=store.get(picker.value)||null;file.value="";draw();refresh();});
       const upload=el("div",null,"upload-zone");upload.append(label,file,drop,el("small","JPG, PNG, WebP · maks. 8 MB per foto"));if(f.id==="virtual-try-on")upload.append(el("small",i===0?"Gunakan foto tubuh dengan area pakaian terlihat jelas. Foto wajah saja hanya dapat mengedit pakaian yang terlihat; jangan gunakan untuk try-on seluruh badan.":"Gunakan foto pakaian yang jelas, idealnya tanpa model lain. Hanya pakaian dari foto ini yang ditransfer."));upload.append(picker,preview);if(initial&&initialIndex===i)picker.value=initial.id;inputs.push(file,picker,browse,remove);form.append(upload);draw();
     });
-    if(f.slots.length)form.append(el("h2","2. Pengaturan edit","section-heading"));
+    form.append(el("h2","2. Pilih konsep","section-heading"));
     if(precisionSupported)form.append(precisionPanel);
-    if(localSharpen)form.append(el("small","Penajaman lokal: tidak menggambar ulang wajah atau objek. Foto tetap pada resolusi asli, maksimal 4 megapiksel."));
-    const presets=validatePresets(f), presetLabel=el("label","Preset kerja");presetLabel.htmlFor="studio-preset";
+    if(localSharpen)form.append(el("small","Detail foto diperjelas tanpa menggambar ulang wajah atau objek."));
+    const presets=validatePresets(f), presetLabel=el("label","Konsep siap pakai");presetLabel.htmlFor="studio-preset";
     const presetPicker=el("select");presetPicker.id="studio-preset";presetPicker.setAttribute("aria-label","Preset kerja");
-    const manual=el("option","Pengaturan sendiri");manual.value="";presetPicker.append(manual);
+    const manual=el("option","Pengaturan standar");manual.value="";presetPicker.append(manual);
     presets.forEach((p,i)=>{const op=el("option",p.label);op.value=String(i);presetPicker.append(op);});
     presetPicker.addEventListener("change",()=>{if(active||!presetPicker.value)return;Object.assign(values,applyPreset(f,values,Number(presetPicker.value)));for(const [id,items] of radios)for(const radio of items)radio.checked=values[id]===radio.value;refresh();});
-    const presetGroup=el("div");presetGroup.append(presetLabel,presetPicker);form.append(presetGroup);inputs.push(presetPicker);fieldGroups.set("presets",presetGroup);
+    const presetGroup=el("div");presetGroup.append(presetLabel,presetPicker);form.append(presetGroup,mainArea);inputs.push(presetPicker);fieldGroups.set("presets",presetGroup);
     for(const field of f.fields){
+      const destination=precisionSupported&&["background","customBackground","sceneBrief"].includes(field.id)?mainArea:!f.slots.length&&field.required?requiredArea:primaryIds.has(field.id)?mainArea:advanced;
       const id="param-"+field.id, label=el("label",field.label+(field.required?" *":""));label.htmlFor=id;
       values[field.id]=field.default||"";
       if(field.options){
@@ -325,21 +337,22 @@ export async function mount({root,ai,version,revision="",signal}){
           if(!radios.has(field.id))radios.set(field.id,[]);radios.get(field.id).push(input);
           input.addEventListener("change",()=>{if(input.checked){values[field.id]=input.value;refresh();presetPicker.value="";}});
           choice.append(input,caption);choices.append(choice);inputs.push(input);
-        });fieldset.append(choices);fieldGroups.set(field.id,fieldset);form.append(fieldset);
+        });fieldset.append(choices);fieldGroups.set(field.id,fieldset);destination.append(fieldset);
       }else{
         const input=el("textarea");input.id=id;input.rows=field.required?4:2;input.maxLength=field.max||1200;input.value=values[field.id];input.required=!!field.required;
-        input.addEventListener("input",()=>{values[field.id]=input.value;refresh();});inputs.push(input);const group=el("div");group.append(label,input);fieldGroups.set(field.id,group);form.append(group);
+        input.addEventListener("input",()=>{values[field.id]=input.value;refresh();});inputs.push(input);const group=el("div");group.append(label,input);fieldGroups.set(field.id,group);destination.append(group);
       }
     }
-    const info=el("details",null,"tool-info");info.append(el("summary","Privasi & informasi"),el("p",localSharpen?"Foto diproses di browser, tanpa dikirim ke Gemini.":precisionSupported?"Mode presisi memproses foto asli di browser; hanya deskripsi latar yang dikirim ke Gemini jika diperlukan. Mode generatif mengirim foto ke Gemini dan dapat mengubah wajah.":"Input dikirim ke Gemini saat diproses. Preservasi visual adalah upaya model, bukan penguncian piksel."));form.append(info,status,blocker);
+    const info=el("details",null,"tool-info");info.append(el("summary","Privasi & informasi"),el("p",localSharpen?"Foto diproses di browser, tanpa dikirim ke Gemini.":precisionSupported?"Mode presisi memproses foto asli di browser; hanya deskripsi latar yang dikirim ke Gemini jika diperlukan. Mode generatif mengirim foto ke Gemini dan dapat mengubah wajah.":"Input dikirim ke Gemini saat diproses. Preservasi visual adalah upaya model, bukan penguncian piksel."));form.append(advanced,el("h2","3. Buat hasil","section-heading"),info,status,blocker);
     const actions=el("div",null,"actions");actions.append(run,retry);form.append(actions);output.append(el("h2","Hasil kerja"),el("p","Hasil akan muncul di sini setelah pemrosesan selesai.","empty result-placeholder"));layout.append(form,output);view.append(layout);refresh();
     async function process(){
       if(active||loading||visionBusy||run.disabled||slots.some(x=>!x))return;
       active=true;retry.hidden=true;result=null;output.replaceChildren(el("p","Memproses…","empty"));status.textContent=localSharpen||precision?"Memproses foto…":"Mengirim satu permintaan AI…";refresh();
       try{
         let res;
-        if(localSharpen)res=await sharpenLocal(slots[0],values);
-        else if(precision){const plan=backdropPlan({...values,transparent});let valid=false;try{valid=visionMask?!!validateMask(visionMask):useAlpha?alphaAvailable:validPolygon(points);}catch{}if(!valid){if(!autoDetect||!await autoDetect()){output.replaceChildren(el("h2","Objek belum terdeteksi"),el("p","Foto asli tetap aman. Periksa jenis foto atau buka koreksi objek."));showPane("input");return;}}status.textContent="Menyiapkan latar dan mempertahankan objek…";const prepared=await prepareCutout(slots[0],points,useAlpha,visionMask);const generated=plan.color||plan.transparent?null:await client.backdrop(plan.prompt);res=await composeCutout(prepared,plan,generated,shadow&&!transparent);}
+        const route=processingRoute(f,precision,{...values,transparent});
+        if(route.kind==="local-sharpen")res=await sharpenLocal(slots[0],values);
+        else if(route.kind==="preserve"){const plan=route.plan;let valid=false;try{valid=visionMask?!!validateMask(visionMask):useAlpha?alphaAvailable:validPolygon(points);}catch{}if(!valid){if(!autoDetect||!await autoDetect()){output.replaceChildren(el("h2","Objek belum terdeteksi"),el("p","Foto asli tetap aman. Periksa jenis foto atau buka koreksi objek."));showPane("input");return;}}status.textContent="Menyiapkan latar dan mempertahankan objek…";const prepared=await prepareCutout(slots[0],points,useAlpha,visionMask);const generated=route.needsAI?await client.backdrop(plan.prompt):null;res=await composeCutout(prepared,plan,generated,shadow&&!transparent);}
         else res=await client.execute(f,{...values},slots);
         if(disposed||signal?.aborted||epoch!==viewEpoch)return;
         let verified=res;if(res.kind==="image"){const dimensions=await decodeImage(res);verified={...res,width:dimensions.width,height:dimensions.height};}
@@ -368,9 +381,9 @@ export async function mount({root,ai,version,revision="",signal}){
           const actions=el("div",null,"actions");
           actions.append(button("Sesuai, gunakan",()=>{if(active||epoch!==viewEpoch||review.state()!=="pending")return;try{finish(review.accept());}catch(e){output.replaceChildren(el("p",friendlyError(e)));}},"primary"),
           button("Tidak sesuai",()=>{if(active||epoch!==viewEpoch||review.state()!=="pending")return;review.reject();result=null;output.replaceChildren(el("h2","Hasil ditolak"),el("p","Foto sumber tetap utuh. Hasil tidak disimpan atau dipakai ulang."),button("Kembali ke pengaturan",adjust));status.textContent="Hasil ditolak oleh pengguna.";if(precision){visionMask=null;points=[];useAlpha=alphaAvailable;correction.open=true;drawMask();}ready.textContent="Hasil tidak disetujui";}));
-          output.append(actions);status.textContent="Menunggu pemeriksaan hasil.";ready.textContent="Hasil AI belum disetujui";
+          output.append(actions);status.textContent="Menunggu pemeriksaan hasil.";ready.textContent="Periksa hasil";
         }else finish(verified);
-      }catch(e){output.replaceChildren(el("p","Tidak ada hasil yang valid.","empty"));status.textContent=friendlyError(e);ready.textContent="Mesin AI · permintaan terakhir gagal";retry.hidden=false;}
+      }catch(e){output.replaceChildren(el("p","Tidak ada hasil yang valid.","empty"));status.textContent=friendlyError(e);ready.textContent="Proses belum berhasil";retry.hidden=false;}
       finally{active=false;refresh();}
     }
   }

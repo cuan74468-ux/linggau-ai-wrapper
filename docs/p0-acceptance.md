@@ -55,3 +55,6 @@ Owner reported manual point selection extracted only a small facial region. Defa
 
 ## Unified candidate — 26 November 2026
 Merged the 24-tool expansion into loader-hardening on top of the simplified UX. Both histories retained. The branch is the sole active development candidate; old release branches are retained as rollback/reference checkpoints, not parallel development targets. No stable or preview change yet. Live inference and commercial release gates remain open.
+
+## Unified beginner-first interface
+Mobile bottom rail contains seven registry categories, assistant, search and session results instead of forty individual buttons. Required briefs and a small set of primary controls remain visible. Advanced settings include optional fields and correction tools. Default preserve mode uses existing alpha or automatic local segmentation, with no manual drawing required. Pure processing router chooses local sharpening, solid/transparent local composition, hybrid background-only generation or explicit generative edit. No simulated output in production; tests use fixtures only. Precision mode retains source dimensions and does not expose unsupported crop/lighting. Model load, complete object selection and quality remain live Canvas gates.
