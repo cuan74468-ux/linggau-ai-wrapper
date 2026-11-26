@@ -57,6 +57,12 @@ async function run(){
  btn(document,"Deteksi objek (AI lokal)").click();
  await wait(()=>document.querySelector(".input-panel .status").textContent.includes("Alat pemisah objek belum siap"),"mock model failure visible");
  assert(!btn(document,"Proses foto").disabled,"previous valid mask retained after failed redetection");
+ openTool("Editor & Manipulasi Visual","background");
+ const portraitInput=document.querySelector("#photo-0"),portraitTransfer=new DataTransfer();portraitTransfer.items.add(new File([opaqueBlob],"portrait-fixture.png",{type:"image/png"}));portraitInput.files=portraitTransfer.files;portraitInput.dispatchEvent(new Event("change",{bubbles:true}));
+ await wait(()=>document.querySelector(".mask-area")?.textContent.includes("Siap deteksi otomatis"),"portrait fixture ready");
+ document.querySelector('input[name="param-background"][value="Putih bersih"]').click();btn(document,"Proses foto").click();
+ await wait(()=>btn(document,"Sesuai, gunakan"),"portrait route review");assert(calls===0,"portrait solid background must remain local");btn(document,"Sesuai, gunakan").click();await wait(()=>btn(document,"Unduh gambar"),"portrait accepted");
+ document.querySelector(".advanced-settings").open=true;document.querySelector(".precision-correction").open=true;btn(document,"Deteksi objek (AI lokal)").click();await wait(()=>document.querySelector(".input-panel .status").textContent.includes("Perapian tepi foto belum berhasil"),"portrait failure feedback");
  nav.querySelector('[aria-label="Cari alat"]').click();const search=document.querySelector('input[aria-label="Cari alat"]');assert(document.querySelectorAll(".category-tool").length===40,"all 40 tools discoverable");search.value="rubrik";search.dispatchEvent(new Event("input",{bubbles:true}));assert(document.querySelectorAll(".category-tool").length===1,"search finds education tool");document.querySelector(".category-tool").click();assert(document.querySelector(".required-fields #param-learningTopic"),"essential brief visible");assert(!document.querySelector(".advanced-settings").open,"text advanced collapsed");assert(document.documentElement.scrollWidth<=window.innerWidth+1,"education 360px overflow");
  window.__smoke={ok:true,detail:"PNG round-trip, local sharpen, 360px workspace, alpha upload, review, product mode and automatic opaque input workflow and mocked vision failure feedback passed"};
 }
