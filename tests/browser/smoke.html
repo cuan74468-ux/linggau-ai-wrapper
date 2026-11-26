@@ -83,6 +83,8 @@ async function run(){
  await wait(()=>document.querySelector(".input-panel .status").textContent==="Objek terdeteksi.","two-corner region correction");
  assert(!btn(document,"Tambah bagian objek").hidden&&!btn(document,"Hapus sisa latar").hidden,"manual brush remains available");
  assert(document.documentElement.scrollWidth<=window.innerWidth+1,"region correction mobile overflow");
+ const addProduct=btn(document,"Tambah produk lain");assert(addProduct&&!addProduct.hidden,"add product option visible");addProduct.click();corner(.10,.15);corner(.42,.55);await wait(()=>document.querySelector(".input-panel .status").textContent.includes("Produk ditambahkan"),"additional region merged");
+ const undoProduct=btn(document,"Urungkan tambah produk");assert(undoProduct&&!undoProduct.hidden,"undo merge visible");undoProduct.click();assert(undoProduct.hidden&&document.querySelector(".input-panel .status").textContent.includes("dibatalkan"),"undo restores previous selection");
  btn(document,"Proses foto").click();await wait(()=>btn(document,"Tidak sesuai"),"region result review");
  assert(calls===0&&!btn(document,"Unduh gambar"),"local region no AI or unreviewed download");
  btn(document,"Tidak sesuai").click();

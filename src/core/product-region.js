@@ -27,3 +27,13 @@ export async function segmentProductRegion(canvas,first,second,{segment=segmentP
   return restoreRegion(await segment(crop,{point:center}),w,h,r);
  }finally{crop.width=crop.height=1;}
 }
+
+// Merge explicitly selected products in the same coordinate frame. No RGB
+// reconstruction, no filling between disconnected objects, no mutation.
+export function mergeProductMasks(current,next){
+ validateMask(current);validateMask(next);
+ if(current.width!==next.width||current.height!==next.height)throw Error("MASK_INVALID");
+ const alpha=new Uint8ClampedArray(current.alpha.length);
+ for(let i=0;i<alpha.length;i++)alpha[i]=Math.max(current.alpha[i],next.alpha[i]);
+ return validateMask({width:current.width,height:current.height,alpha,engine:"product-multiple"});
+}
