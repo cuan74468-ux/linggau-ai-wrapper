@@ -1,5 +1,5 @@
 import {createServer} from "node:http";
-import {readFile,mkdtemp,rm} from "node:fs/promises";
+import {readFile,mkdtemp,rm,mkdir,writeFile} from "node:fs/promises";
 import {spawn} from "node:child_process";
 import {tmpdir} from "node:os";
 import {resolve,extname,sep} from "node:path";
@@ -22,10 +22,18 @@ try{
  ws=new WebSocket(page.webSocketDebuggerUrl);await new Promise((resolve,reject)=>{ws.addEventListener("open",resolve,{once:true});ws.addEventListener("error",reject,{once:true});});
  let seq=0;const pending=new Map();ws.addEventListener("message",e=>{const m=JSON.parse(e.data);if(pending.has(m.id)){const {resolve,reject}=pending.get(m.id);pending.delete(m.id);m.error?reject(Error(JSON.stringify(m.error))):resolve(m.result);}});
  const cdp=(method,params={})=>new Promise((resolve,reject)=>{const id=++seq;pending.set(id,{resolve,reject});ws.send(JSON.stringify({id,method,params}));});
- await cdp("Emulation.setDeviceMetricsOverride",{width:360,height:800,deviceScaleFactor:1,mobile:true});
+ await cdp("Emulation.setDeviceMetricsOverride",product?{width:1200,height:1100,deviceScaleFactor:1,mobile:false}:{width:360,height:800,deviceScaleFactor:1,mobile:true});
  await cdp("Page.navigate",{url:"http://127.0.0.1:"+server.address().port+(product?"/tests/browser/product-benchmark.html"+(process.argv.includes("--birefnet-pilot")?"?pilot=1":""):benchmark?"/tests/browser/matte-benchmark.html":real?"/tests/browser/real-vision.html":"/tests/browser/smoke.html")});
  let result;
  for(let i=0;i<(real?3000:240);i++){await delay(100);try{const r=await cdp("Runtime.evaluate",{expression:"window.__smoke",returnByValue:true});result=r.result?.value;if(result)break;}catch{}}
+ if(product){
+  try{
+   await mkdir(resolve(root,"qa-artifacts"),{recursive:true});
+   const shot=await cdp("Page.captureScreenshot",{format:"png",captureBeyondViewport:true});
+   await writeFile(resolve(root,"qa-artifacts/product-visual.png"),Buffer.from(shot.data,"base64"));
+   await writeFile(resolve(root,"qa-artifacts/product-metrics.txt"),result?.detail||"Browser smoke timed out");
+  }catch(e){console.warn("PRODUCT_EVIDENCE_FAILED",String(e.message).slice(0,200));}
+ }
  if(!result?.ok)throw Error(result?.detail||"Browser smoke timed out");
  console.log((product?"PRODUCT_BENCHMARK_COMPLETE: ":benchmark?"MATTE_BENCHMARK_PASS: ":real?"REAL_VISION_PASS: ":"BROWSER_SMOKE_PASS: ")+result.detail);
 }finally{ws?.close();browser.kill("SIGKILL");server.close();await delay(200);await rm(dir,{recursive:true,force:true}).catch(()=>{});}

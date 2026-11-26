@@ -1,8 +1,21 @@
-<!doctype html><html lang="id"><meta charset="utf-8"><title>Product segmentation benchmark</title><body><script type="module">
+<!doctype html><html lang="id"><meta charset="utf-8"><title>Product segmentation benchmark</title><style>body{margin:20px;font:14px system-ui;color:#222;background:white}h1{font-size:22px}section{margin:14px 0}h2{font-size:15px;margin:4px 0}.qa-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}figure{margin:0;border:1px solid #bbb;padding:6px}figcaption{font-size:12px;min-height:32px}canvas{display:block;width:100%;height:205px;object-fit:contain;background:#eee}p{font-size:12px}</style><body><h1>Product segmentation QA — public annotated samples</h1><p>Green = correctly retained; red = leaked background; blue = missed foreground. Oracle point is diagnostic only.</p><script type="module">
 import {segmentProduct} from "../../src/core/product-engine.js";
 import {openProductMatte} from "../../src/core/product-birefnet.js";
 import {interiorSeed} from "../../src/core/product-seed.js";
 import {prepareCutout,composeCutout,backdropPlan} from "../../src/core/local-image.js";
+function visualRow(id,source,truth){
+ const section=document.createElement("section"),title=document.createElement("h2"),grid=document.createElement("div");title.textContent="Finegrain row "+id;grid.className="qa-row";section.append(title,grid);document.body.append(section);
+ function cell(label){const f=document.createElement("figure"),caption=document.createElement("figcaption");caption.textContent=label;f.append(caption);grid.append(f);return {f,caption};}
+ const original=cell("Original");original.f.append(surface(source.width,source.height,source));
+ const reference=cell("Annotated target");reference.f.append(surface(source.width,source.height,truth));
+ const auto=cell("Automatic"),oracle=cell("Annotation-assisted point (diagnostic)");
+ function paint(slot,m,score){
+  const w=source.width,h=source.height,c=surface(w,h,source),ctx=c.getContext("2d"),d=ctx.getImageData(0,0,w,h),gt=surface(w,h,truth).getContext("2d").getImageData(0,0,w,h).data;
+  for(let i=0;i<w*h;i++){const pred=m.alpha[i]>=128,t=gt[4*i]>=128;if(!pred&&!t)continue;const color=pred&&t?[30,190,60]:pred?[235,35,35]:[30,90,245];for(let k=0;k<3;k++)d.data[4*i+k]=Math.round(.55*d.data[4*i+k]+.45*color[k]);}
+  ctx.putImageData(d,0,0);slot.caption.textContent+=" — IoU "+(score.iou*100).toFixed(1)+"%";slot.f.append(c);
+ }
+ return {auto:(m,s)=>paint(auto,m,s),oracle:(m,s)=>paint(oracle,m,s),reject:(kind,e)=>{(kind==="auto"?auto:oracle).caption.textContent+=" — refused: "+String(e.message).slice(0,80);}};
+}
 const notes=[];async function read(src){const i=new Image();i.src=src;await i.decode();return i;}
 function surface(w,h,img){const c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d").drawImage(img,0,0,w,h);return c;}
 function metrics(mask,gt,w,h){if(mask.width!==w||mask.height!==h)throw Error("geometry mismatch");let fg=0,bg=0,miss=0,leak=0,inter=0,union=0;for(let i=0;i<w*h;i++){const a=mask.alpha[i]>=128,t=gt[i*4]>=128;if(t){fg++;if(!a)miss++;}else{bg++;if(a)leak++;}if(t&&a)inter++;if(t||a)union++;}if(!fg||!bg)throw Error("invalid reference");return {iou:inter/union,miss:miss/fg,leak:leak/bg};}
@@ -13,25 +26,26 @@ try{
   if(image.naturalWidth!==truth.naturalWidth||image.naturalHeight!==truth.naturalHeight)throw Error("reference geometry");
   const scale=Math.min(1,512/Math.max(image.naturalWidth,image.naturalHeight)),w=Math.round(image.naturalWidth*scale),h=Math.round(image.naturalHeight*scale);
   const c=surface(w,h,image),g=surface(w,h,truth).getContext("2d").getImageData(0,0,w,h).data;
+  const visual=visualRow(id,c,truth);
   const referenceAlpha=new Uint8ClampedArray(w*h);let fg=0,transparent=0,channelMismatch=0;
   for(let i=0;i<w*h;i++){referenceAlpha[i]=g[4*i]>=128?255:0;if(referenceAlpha[i])fg++;if(g[4*i+3]<255)transparent++;if(g[4*i]!==g[4*i+1]||g[4*i]!==g[4*i+2])channelMismatch++;}
   notes.push("row "+id+" reference "+JSON.stringify({w,h,foreground:fg/(w*h),transparent,channelMismatch}));
   try{
    const m=await segmentProduct(c);auto++;
-   const score=metrics(m,g,w,h);
+   const score=metrics(m,g,w,h);visual.auto(m,score);
    const result=await composeCutout(await prepareCutout({mimeType:"image/png",base64:c.toDataURL("image/png").split(",")[1]},[],false,m),backdropPlan({background:"Putih bersih"}));
    if(!result.pixelVerified)throw Error("protected PNG verification");
    completed++;if(score.iou>=.9&&score.miss<=.05&&score.leak<=.05)passed++;
    notes.push("row "+id+" automatic "+JSON.stringify(score)+" protected="+result.protectedPixels);
-  }catch(e){notes.push("row "+id+" auto rejected "+e.message);}
+  }catch(e){visual.reject("auto",e);notes.push("row "+id+" auto rejected "+e.message);}
   // Oracle point uses annotation solely to diagnose object selection vs extraction.
   // It must never count toward automatic runtime quality.
   try{
    const point=interiorSeed({width:w,height:h,alpha:referenceAlpha});
-   const m=await segmentProduct(c,{point}),s=metrics(m,g,w,h);
+   const m=await segmentProduct(c,{point}),s=metrics(m,g,w,h);visual.oracle(m,s);
    if(s.iou>=.9&&s.miss<=.05&&s.leak<=.05)oraclePassed++;
    notes.push("row "+id+" oracle-point "+JSON.stringify(s));
-  }catch(e){notes.push("row "+id+" oracle-point rejected "+e.message);}
+  }catch(e){visual.reject("oracle",e);notes.push("row "+id+" oracle-point rejected "+e.message);}
  }
  // Separate exact-reference, off-center packaging exercise. Uses a drawn label,
  // not an AI reconstruction, and actual MagicTouch, not a mock.
