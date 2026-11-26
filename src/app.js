@@ -236,7 +236,7 @@ export async function mount({root,ai,version,revision="",signal}){
     form.append(el("h2",f.slots.length?"1. Masukkan foto":"1. Isi kebutuhan Anda"));
     const requiredArea=el("div",null,"required-fields"),mainArea=el("div",null,"main-fields"),advanced=el("details",null,"advanced-settings");advanced.append(el("summary","Pengaturan lanjutan"));if(!f.slots.length)form.append(requiredArea);
     
-    const status=el("p","Siap menerima input.","status");status.setAttribute("role","status");
+    const status=el("p","", "status");status.setAttribute("role","status");
     const blocker=el("p",null,"process-blocker");blocker.setAttribute("role","status");blocker.id="process-blocker";
     const run=button("Proses AI",process,"primary"), retry=button("Coba Lagi",process);retry.hidden=true;run.setAttribute("aria-describedby",blocker.id);
     function refresh(){
@@ -256,28 +256,30 @@ export async function mount({root,ai,version,revision="",signal}){
         }
       }
       if(!reason&&f.fields.some(p=>p.required&&(!precision||(!transparent&&p.id==="sceneBrief"))&&!String(values[p.id]||"").trim()))reason="Lengkapi kolom wajib.";
-      if(!reason&&!available&&!active)reason="Mesin AI belum tersedia.";
+      if(!reason&&!available&&!active)reason="Koneksi AI belum tersedia. Buka ulang aplikasi."
       blocker.textContent=active?"":reason;blocker.hidden=!blocker.textContent;
       form.classList.toggle("precision-active",precision);
       run.disabled=disabled||slots.some(x=>!x)||f.fields.some(p=>p.required&&(!precision||(!transparent&&p.id==="sceneBrief"))&&!String(values[p.id]||"").trim())||!available;retry.disabled=run.disabled;
       inputs.forEach(x=>x.disabled=disabled);maskControls.forEach(x=>x.disabled=disabled);
       if(maskCanvas)maskCanvas.style.pointerEvents=disabled?"none":"auto";
       for(const [id,group] of fieldGroups)group.hidden=(precision&&(transparent||!["background","customBackground","sceneBrief"].includes(id)))||(localSharpen&&id==="notes");
-      run.textContent=active?"Sedang memproses…":f.engine==="text-to-text"?"Buat teks":"Proses foto";setNav();
+      run.textContent=active?"Sedang memproses…":f.engine==="text-to-text"?"Buat teks":f.engine==="text-to-image"?"Buat gambar":"Proses foto";setNav();
     }
+    const modeArea=el("section",null,"mode-area");
     const precisionPanel=el("section",null,"precision-panel");
     const maskArea=el("div",null,"mask-area");const correction=el("details",null,"precision-correction");correction.append(el("summary","Koreksi objek (opsional)"),maskArea);
     if(precisionSupported){
       const modeLabel=el("label","Cara mengedit");modeLabel.htmlFor="precision-mode";
       const mode=el("select");mode.id="precision-mode";for(const [v,t] of [["strict","Pertahankan objek asli"],["ai","Ubah tampilan dengan AI (detail dapat berubah)"]]){const o=el("option",t);o.value=v;mode.append(o);}
-      const explanation=el("small","Foto asli dipertahankan pada bagian yang terdeteksi. Pilih latar lalu buat foto.");
+      const modeInfo=el("small","Foto tidak dikirim ke Gemini dalam mode ini. Latar khusus mungkin membutuhkan AI.");
+      const explanation=el("small","Beta: pemisahan otomatis dapat keliru pada latar rumit. Periksa hasil sebelum menggunakannya.");
       const subjectLabel=el("label","Isi foto");subjectLabel.htmlFor="subject-kind";const subject=el("select");subject.id="subject-kind";for(const [value,label] of [["person","Orang / potret"],["object","Produk / makanan / benda"]]){const opt=el("option",label);opt.value=value;subject.append(opt);}subject.value=subjectKind;subject.addEventListener("change",()=>{subjectKind=subject.value;visionMask=null;points=[];status.textContent="Jenis foto diubah. Deteksi akan dijalankan saat proses.";drawMask();refresh();});inputs.push(subject);
       const transparentLabel=el("label",null,"precision-option"),transparentBox=el("input");transparentBox.type="checkbox";transparentLabel.append(transparentBox,el("span","Hapus latar (PNG transparan)"));transparentBox.addEventListener("change",()=>{transparent=transparentBox.checked;refresh();});inputs.push(transparentBox);
       const shadowLabel=el("label",null,"precision-option"),shadowBox=el("input");shadowBox.type="checkbox";shadowLabel.append(shadowBox,el("span","Tambahkan bayangan di bawah objek"));shadowBox.addEventListener("change",()=>{shadow=shadowBox.checked;refresh();});inputs.push(shadowBox);
       transparentBox.addEventListener("change",()=>{shadowLabel.hidden=transparent;});
       precisionPanel.append(subjectLabel,subject,explanation,transparentLabel);advanced.append(shadowLabel,correction);
-      mode.addEventListener("change",()=>{precision=mode.value==="strict";precisionPanel.hidden=!precision;shadowLabel.hidden=!precision||transparent;correction.hidden=!precision;presetPicker.value="";refresh();});
-      advanced.prepend(modeLabel,mode);inputs.push(mode);
+      mode.addEventListener("change",()=>{precision=mode.value==="strict";precisionPanel.hidden=!precision;shadowLabel.hidden=!precision||transparent;correction.hidden=!precision;modeInfo.textContent=precision?"Foto tidak dikirim ke Gemini dalam mode ini. Latar khusus mungkin membutuhkan AI.":"Foto dikirim ke Gemini. Wajah, kemasan, tulisan dan detail dapat berubah.";presetPicker.value="";refresh();});
+      modeArea.append(modeLabel,mode,modeInfo);inputs.push(mode);
     }
     function drawMask(){
       if(!maskCanvas||!maskImage)return;const ctx=maskCanvas.getContext("2d");if(!ctx)return;
@@ -361,7 +363,7 @@ export async function mount({root,ai,version,revision="",signal}){
       const upload=el("div",null,"upload-zone");upload.append(label,file,drop,el("small","JPG, PNG, WebP · maks. 8 MB per foto. Foto besar disesuaikan otomatis."));if(f.id==="virtual-try-on")upload.append(el("small",i===0?"Gunakan foto tubuh dengan area pakaian terlihat jelas. Foto wajah saja hanya dapat mengedit pakaian yang terlihat; jangan gunakan untuk try-on seluruh badan.":"Gunakan foto pakaian yang jelas, idealnya tanpa model lain. Hanya pakaian dari foto ini yang ditransfer."));upload.append(picker,preview);inputs.push(file,picker,browse,remove);form.append(upload);draw();if(initial&&initialIndex===i){picker.value=initial.id;queueMicrotask(()=>{if(!disposed&&epoch===viewEpoch)void acceptPhoto(initial,true);});}
     });
     form.append(el("h2","2. Pilih konsep","section-heading"));
-    if(precisionSupported)form.append(precisionPanel);
+    if(precisionSupported)form.append(modeArea,precisionPanel);
     if(localSharpen)form.append(el("small","Detail foto diperjelas tanpa menggambar ulang wajah atau objek."));
     if(["poster","thumbnail"].includes(f.id))form.append(el("small","AI membuat visual; judul dan CTA ditulis langsung dari isian Anda. Periksa visual sebelum digunakan."));
     const presets=validatePresets(f), presetLabel=el("label","Konsep siap pakai");presetLabel.htmlFor="studio-preset";
@@ -371,7 +373,7 @@ export async function mount({root,ai,version,revision="",signal}){
     presetPicker.addEventListener("change",()=>{if(active||!presetPicker.value)return;Object.assign(values,applyPreset(f,values,Number(presetPicker.value)));for(const [id,items] of radios)for(const radio of items)radio.checked=values[id]===radio.value;refresh();});
     const presetGroup=el("div");presetGroup.append(presetLabel,presetPicker);form.append(presetGroup,mainArea);inputs.push(presetPicker);fieldGroups.set("presets",presetGroup);
     for(const field of f.fields){
-      const destination=precisionSupported&&["background","customBackground","sceneBrief"].includes(field.id)?mainArea:!f.slots.length&&field.required?requiredArea:primaryIds.has(field.id)?mainArea:advanced;
+      const destination=precisionSupported&&["background","customBackground","sceneBrief"].includes(field.id)?mainArea:!f.slots.length&&(field.required||(["poster","thumbnail"].includes(f.id)&&field.id==="cta"))?requiredArea:primaryIds.has(field.id)?mainArea:advanced;
       const id="param-"+field.id, label=el("label",field.label+(field.required?" *":""));label.htmlFor=id;
       values[field.id]=field.default||"";
       if(field.options){
@@ -407,7 +409,7 @@ export async function mount({root,ai,version,revision="",signal}){
         if(disposed||signal?.aborted||epoch!==viewEpoch)return;
         verified={...verified,quality:assessOutput(f,precision?{...values,ratio:"auto"}:values,verified,slots)};
         const jobSources=[...slots], parents=jobSources.filter(x=>x.id).map(x=>x.id);
-        const adjust=()=>{if(active)return;showPane("input");const notes=form.querySelector("#param-notes");if(notes){notes.scrollIntoView({block:"center"});notes.focus();}status.textContent="Sesuaikan pengaturan sebelum memproses ulang.";};
+        const adjust=()=>{if(active)return;showPane("input");const target=[...form.querySelectorAll("input:not([type=file]),select,textarea")].find(x=>x.offsetParent!==null&&!x.disabled);if(target){target.scrollIntoView({block:"nearest"});target.focus({preventScroll:true});}status.textContent="Sesuaikan pengaturan sebelum memproses ulang.";};
         const finish=accepted=>{
           result=store.add(accepted,f.id,parents);resultCard(result,output);
           if(jobSources.length){const compare=el("details",null,"quality-panel");compare.append(el("summary","Bandingkan foto sumber"));jobSources.forEach((source,i)=>{compare.append(el("small",f.slots[i]),image(source));});output.append(compare);}

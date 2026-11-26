@@ -238,3 +238,5 @@
 #studio .session-confirm{position:sticky;top:0;z-index:50;padding:12px;margin:0 0 10px;background:var(--paper);border:2px solid var(--ink);border-radius:8px;box-shadow:3px 3px 0 var(--ink)}#studio .session-confirm p{margin:0 0 8px;font-size:14px}#studio .session-confirm .actions{margin:0;flex-wrap:wrap}
 
 #studio .roi-output{min-width:0}#studio .roi-metrics{margin:8px 0 16px}#studio .roi-metrics>div{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;padding:10px 0;border-bottom:1px solid var(--line);align-items:start}#studio .roi-metrics dt{font-size:13px;color:var(--muted)}#studio .roi-metrics dd{margin:0;text-align:right;font-weight:700;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}#studio .roi-output details{margin-top:12px}#studio .roi-output textarea{margin-top:8px}
+
+#studio .mode-area{display:grid;gap:5px;padding:10px 0;margin:4px 0}#studio .mode-area>small{font-size:12px;line-height:1.45}#studio .precision-panel>small{line-height:1.45}#studio .status:empty{display:none}#studio .required-fields>div,#studio .main-fields>div{min-width:0}
