@@ -5,6 +5,7 @@ import {tmpdir} from "node:os";
 import {resolve,extname,sep} from "node:path";
 import {setTimeout as delay} from "node:timers/promises";
 const liveLoader=process.argv.includes("--live-loader");
+const license=process.argv.includes("--studio-license");
 const expectedPreview=liveLoader?JSON.parse(await readFile("docs/channel.json","utf8")).commit:null;
 const benchmark=process.argv.includes("--matte-benchmark");
 const dailyProduct=process.argv.includes("--daily-product");
@@ -27,9 +28,9 @@ try{
  const safeUrl=value=>{try{const u=new URL(value);return u.protocol==="https:"||u.protocol==="http:"?u.origin+u.pathname:u.protocol;}catch{return "invalid-url";}};
  ws.addEventListener("message",e=>{const m=JSON.parse(e.data);if(m.method==="Network.requestWillBeSent"){const p=m.params;requests.push(p.request.url);if(liveLoader)requestById.set(p.requestId,safeUrl(p.request.url));}if(liveLoader&&m.method==="Network.responseReceived"){const p=m.params;networkEvents.push({url:safeUrl(p.response.url),status:p.response.status});}if(liveLoader&&m.method==="Network.loadingFailed"){const p=m.params;networkEvents.push({url:requestById.get(p.requestId)||"unknown",error:p.errorText,blocked:p.blockedReason,cors:p.corsErrorStatus?.corsError});}if(liveLoader&&m.method==="Runtime.consoleAPICalled"){const args=m.params.args.map(x=>x.value);if(args[0]==="LINGGAU_LOADER"||args[0]==="LINGGAU_LOADER_READY")loaderEvents.push(args.slice(0,4).map(x=>typeof x==="string"?x.slice(0,100):null));}if(pending.has(m.id)){const {resolve,reject}=pending.get(m.id);pending.delete(m.id);m.error?reject(Error(JSON.stringify(m.error))):resolve(m.result);}});
  const cdp=(method,params={})=>new Promise((resolve,reject)=>{const id=++seq;pending.set(id,{resolve,reject});ws.send(JSON.stringify({id,method,params}));});
- if(liveLoader){await cdp("Network.enable");await cdp("Runtime.enable");}
+ if(liveLoader||license){await cdp("Network.enable");await cdp("Runtime.enable");}
  await cdp("Emulation.setDeviceMetricsOverride",product?{width:1200,height:1100,deviceScaleFactor:1,mobile:false}:{width:360,height:800,deviceScaleFactor:1,mobile:true});
- await cdp("Page.navigate",{url:"http://127.0.0.1:"+server.address().port+(liveLoader?"/canvas/shell.html":product?"/tests/browser/product-benchmark.html"+(dailyProduct?"?daily=1":process.argv.includes("--birefnet-pilot")?"?pilot=1":""):benchmark?"/tests/browser/matte-benchmark.html":real?"/tests/browser/real-vision.html":"/tests/browser/smoke.html")});
+ await cdp("Page.navigate",{url:"http://127.0.0.1:"+server.address().port+(liveLoader?"/canvas/shell.html":license?"/tests/browser/studio-license.html":product?"/tests/browser/product-benchmark.html"+(dailyProduct?"?daily=1":process.argv.includes("--birefnet-pilot")?"?pilot=1":""):benchmark?"/tests/browser/matte-benchmark.html":real?"/tests/browser/real-vision.html":"/tests/browser/smoke.html")});
  let result;
  for(let i=0;i<(real?3000:liveLoader?700:240);i++){await delay(100);try{const expression=liveLoader?`(()=>{const app=document.getElementById("app"),brand=document.querySelector("#studio .brand"),rail=document.querySelector("#studio .mobile-rail");if(app?.getAttribute("aria-busy")==="false"&&!brand)return {ok:false,detail:app.innerText.slice(0,400)};if(!brand||!rail||getComputedStyle(rail).overflowX!=="auto")return null;const rev=${JSON.stringify(expectedPreview)},good=JSON.parse(localStorage.getItem("linggau-loader-v2:lkg:preview")||"null");return {ok:brand.textContent.includes(rev.slice(0,7))&&good?.commit===rev&&document.documentElement.scrollWidth<=innerWidth+1,detail:"revision="+brand.textContent+" LKG="+good?.commit+" viewport="+innerWidth+" scrollWidth="+document.documentElement.scrollWidth};})()`:"window.__smoke";const r=await cdp("Runtime.evaluate",{expression,returnByValue:true});result=r.result?.value;if(result)break;}catch{}}
  if(liveLoader){
@@ -38,6 +39,7 @@ try{
   if(!requests.includes(pointer)||!requests.includes(entry)||forbidden.length||!result?.ok){console.error("LIVE_LOADER_DIAGNOSTIC",JSON.stringify({pointerRequested:requests.includes(pointer),entryRequested:requests.includes(entry),forbidden:forbidden.map(safeUrl),result,loaderEvents,network:networkEvents.slice(-80)}));}
   if(!requests.includes(pointer)||!requests.includes(entry)||forbidden.length)throw Error("LIVE_LOADER_NETWORK_CONTRACT");
  }
+ if(license&&requests.some(u=>/^https?:/.test(u)&&!u.startsWith("http://127.0.0.1:"+server.address().port+"/")))throw Error("LICENSE_UNEXPECTED_EXTERNAL_NETWORK");
  if(product){
   try{
    await mkdir(resolve(root,"qa-artifacts"),{recursive:true});
@@ -47,5 +49,5 @@ try{
   }catch(e){console.warn("PRODUCT_EVIDENCE_FAILED",String(e.message).slice(0,200));}
  }
  if(!result?.ok)throw Error(result?.detail||"Browser smoke timed out");
- console.log((liveLoader?"LIVE_LOADER_PASS: ":dailyProduct?"DAILY_PRODUCT_PASS: ":product?"PRODUCT_BENCHMARK_COMPLETE: ":benchmark?"MATTE_BENCHMARK_PASS: ":real?"REAL_VISION_PASS: ":"BROWSER_SMOKE_PASS: ")+result.detail);
+ console.log((liveLoader?"LIVE_LOADER_PASS: ":license?"STUDIO_LICENSE_BROWSER_PASS: ":dailyProduct?"DAILY_PRODUCT_PASS: ":product?"PRODUCT_BENCHMARK_COMPLETE: ":benchmark?"MATTE_BENCHMARK_PASS: ":real?"REAL_VISION_PASS: ":"BROWSER_SMOKE_PASS: ")+result.detail);
 }finally{ws?.close();browser.kill("SIGKILL");server.close();await delay(200);await rm(dir,{recursive:true,force:true}).catch(()=>{});}

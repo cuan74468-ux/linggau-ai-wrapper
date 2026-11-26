@@ -19,6 +19,10 @@ jobs:
         env:
           STUDIO_MINIFIER_DIR: ${{ runner.temp }}/studio-minifier
         run: node --test prototypes/studio-licensing/*.test.mjs
+      - name: Existing application unit regression
+        run: node --experimental-default-type=module --test tests/*.test.js
+      - name: Chromium licensed UI and actual workspace with synthetic transport
+        run: node --experimental-default-type=module tests/browser/run.mjs --studio-license
       - name: Generate temporary shell only (not published or licensed)
         env:
           STUDIO_MINIFIER_DIR: ${{ runner.temp }}/studio-minifier

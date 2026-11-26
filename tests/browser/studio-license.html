@@ -1,0 +1,56 @@
+<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;font:15px system-ui}#studio-grant{max-width:100%;box-sizing:border-box}</style></head><body><main id="app"></main>
+<script type="module">
+import {createStudioLicenseClient} from "../../prototypes/studio-licensing/client.mjs";
+import {mountStudioLogin} from "../../prototypes/studio-licensing/login-ui.mjs";
+const root=document.getElementById("app"), assert=(ok,msg)=>{if(!ok)throw Error(msg)};
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function wait(fn,msg){for(let i=0;i<160;i++){if(fn())return;await sleep(25);}throw Error("timeout "+msg);}
+const code="a".repeat(64),token="b".repeat(64),endpoint="https://script.google.com/macros/s/FIXTURE_ONLY/exec";
+let calls=[],allowed=true,offline=false,ttl=60000,expires=0,mounts=0,unmounts=0,job=null,jobSignal=null,holdMount=null;
+const fetcher=async(url,opt)=>{
+ assert(url===endpoint&&opt.method==="POST"&&opt.credentials==="omit"&&opt.redirect==="follow","transport");
+ assert(opt.headers["Content-Type"]==="text/plain;charset=utf-8","content type");
+ const q=JSON.parse(opt.body);calls.push(q.action);
+ assert(/^[a-zA-Z0-9_-]{16,80}$/.test(q.request_id),"request id");
+ let body={ok:false,error:{code:"UNAUTHORIZED"}};
+ if(offline)throw Error("fixture network");
+ if(q.action==="studioExchangeGrant"){assert(q.token===""&&Object.keys(q.payload).length===1,"exchange scope");if(allowed&&q.payload.code===code){expires=Date.now()+ttl;body={ok:true,data:{token,expires_at:expires}};}}
+ else{assert(q.token===token&&Object.keys(q.payload).length===0,"session scope");if(q.action==="studioLogout"){body={ok:true,data:{success:true}};}else if(q.action==="studioValidateSession"&&allowed&&Date.now()<expires){body={ok:true,data:{active:true,member_id:"M-9001",expires_at:expires}};}}
+ return {ok:true,url:endpoint,text:async()=>JSON.stringify(body)};
+};
+const client=createStudioLicenseClient({apiUrl:endpoint,fetcher});
+const bridge={available:true,generateText:req=>{jobSignal=req.signal;return new Promise(resolve=>{job=resolve;});}};
+const handle=mountStudioLogin({root,client,pollMs:1000,mount:async ctx=>{
+ mounts++;assert(calls.at(-1)==="studioValidateSession","mount only after validation");
+ if(holdMount)await holdMount;
+ const app=await import("../../src/app.js");
+ const mounted=await app.mount({root:ctx.root,ai:bridge,version:"0.3.0",revision:"4d9be8d",signal:ctx.signal});
+ return {unmount(){unmounts++;mounted.unmount();}};
+}});
+const input=()=>document.getElementById("studio-grant");
+const submit=async value=>{await wait(()=>!input().disabled,"login ready");input().value=value;input().form.requestSubmit();};
+const mounted=()=>!!root.querySelector("#studio");
+const locked=()=>!mounted()&&!input().disabled;
+const logout=()=>[...root.querySelectorAll("button")].find(b=>b.textContent==="Keluar");
+async function run(){
+ assert(!mounted()&&mounts===0&&calls.length===0,"default locked");
+ assert(root.querySelector("a").href==="https://cuan74468-ux.github.io/ngulik-digital-member/staging/member.html#login","official portal");
+ await submit("");await sleep(50);assert(calls.length===0,"empty no request");
+ await submit("c".repeat(64));await wait(locked,"invalid denial");assert(mounts===0,"invalid never mounts");
+ await submit(code);await wait(mounted,"actual mount");await wait(()=>getComputedStyle(root.querySelector(".mobile-rail")).overflowX==="auto","actual CSS");
+ assert(document.documentElement.scrollWidth<=innerWidth+1,"mobile overflow");
+ assert(input().value===""&&client.active(),"code cleared");
+ const field=root.querySelector(".chat-composer textarea");field.value="Synthetic job";field.dispatchEvent(new Event("input",{bubbles:true}));field.form.requestSubmit();
+ await wait(()=>job!==null,"synthetic job started");allowed=false;await wait(locked,"revocation");
+ assert(jobSignal.aborted&&unmounts===1&&!client.active(),"actual job aborted and app removed");
+ job({kind:"text",text:"STALE_OUTPUT",elapsedMs:1});await sleep(30);assert(!root.textContent.includes("STALE_OUTPUT"),"stale output discarded");
+ allowed=true;await submit(code);await wait(mounted,"re-login");logout().click();await wait(locked,"logout");assert(calls.includes("studioLogout")&&!client.active(),"server logout");
+ await submit(code);await wait(mounted,"network case");offline=true;await wait(locked,"network denial");offline=false;
+ ttl=500;await submit(code);await wait(mounted,"expiry mount");await wait(locked,"expiry lock");
+ ttl=500;let release;holdMount=new Promise(r=>{release=r;});await submit(code);await wait(()=>mounts===5,"late mount start");await wait(locked,"late expiry");release();await wait(()=>unmounts===5,"late handle disposed");assert(!mounted(),"late workspace never attached");
+ assert(localStorage.length===0&&sessionStorage.length===0&&!location.href.includes(code)&&!location.href.includes(token),"no credential persistence");
+ handle.unmount();assert(root.children.length===0,"dispose");
+ window.__smoke={ok:true,detail:"360px; denied grant; actual workspace; revoke/abort/stale; logout; network; expiry; late mount; no storage/provider calls"};
+}
+run().catch(e=>{window.__smoke={ok:false,detail:String(e.stack||e)};});
+</script></body></html>
