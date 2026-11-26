@@ -334,6 +334,7 @@ export async function mount({root,ai,version,revision="",signal}){
     form.append(el("h2","2. Pilih konsep","section-heading"));
     if(precisionSupported)form.append(precisionPanel);
     if(localSharpen)form.append(el("small","Detail foto diperjelas tanpa menggambar ulang wajah atau objek."));
+    if(["poster","thumbnail"].includes(f.id))form.append(el("small","AI membuat visual; judul dan CTA ditulis langsung dari isian Anda. Periksa visual sebelum digunakan."));
     const presets=validatePresets(f), presetLabel=el("label","Konsep siap pakai");presetLabel.htmlFor="studio-preset";
     const presetPicker=el("select");presetPicker.id="studio-preset";presetPicker.setAttribute("aria-label","Preset kerja");
     const manual=el("option","Pengaturan standar");manual.value="";presetPicker.append(manual);
@@ -370,6 +371,7 @@ export async function mount({root,ai,version,revision="",signal}){
         const route=processingRoute(f,precision,{...values,transparent});
         if(route.kind==="local-sharpen")res=await sharpenLocal(slots[0],values);
         else if(route.kind==="preserve"){validateDimensions(slots[0].width,slots[0].height);const plan=route.plan;phase="Pemisahan objek";let valid=false;try{valid=visionMask?!!validateMask(visionMask):useAlpha?alphaAvailable:validPolygon(points);}catch{}if(!valid){if(!autoDetect||!await autoDetect()){output.replaceChildren(el("h2","Objek belum terdeteksi"),el("p",status.textContent),el("p","Foto asli tetap aman."));showPane("input");retry.hidden=false;return;}}phase="Menyiapkan foto";status.textContent="Menyiapkan latar dan mempertahankan objek…";const prepared=await prepareCutout(slots[0],points,useAlpha,visionMask);phase="Membuat latar";const generated=route.needsAI?await client.backdrop(plan.prompt):null;phase="Menyimpan foto";res=await composeCutout(prepared,plan,generated,shadow&&!transparent);console.info("LINGGAU_COMPOSITE_OK",res.width,res.height,res.protectedPixels);}
+        else if(route.kind==="text-overlay"){phase="Membuat visual dan menyusun teks";const {renderTextOverlay}=await import("./core/text-overlay.js");res=await renderTextOverlay(f,{...values},client,{signal});}
         else {phase="Membuat hasil";res=await client.execute(f,{...values},slots);}
         if(disposed||signal?.aborted||epoch!==viewEpoch)return;
         phase="Memeriksa hasil";let verified=res;if(res.kind==="image"){const dimensions=await decodeImage(res);verified={...res,width:dimensions.width,height:dimensions.height};}
@@ -382,7 +384,7 @@ export async function mount({root,ai,version,revision="",signal}){
           if(jobSources.length){const compare=el("details",null,"quality-panel");compare.append(el("summary","Bandingkan foto sumber"));jobSources.forEach((source,i)=>{compare.append(el("small",f.slots[i]),image(source));});output.append(compare);}
           output.append(button("Sesuaikan & buat ulang",adjust));
           status.textContent=(verified.quality.checks.some(c=>c.state==="warn")?"Perlu diperiksa · ":"Selesai · ")+(res.elapsedMs/1000).toFixed(1)+" detik";
-          ready.textContent=accepted.processing?"Pemrosesan foto selesai":"Mesin AI · permintaan terakhir berhasil";renderNavigation();
+          ready.textContent=accepted.processing==="text-overlay"?"Desain selesai":accepted.processing?"Pemrosesan foto selesai":"Mesin AI · permintaan terakhir berhasil";renderNavigation();
         };
         showPane("output");if(compact.matches)tabs.scrollIntoView({block:"start"});
         if(needsReferenceReview(f)){

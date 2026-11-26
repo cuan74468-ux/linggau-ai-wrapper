@@ -54,9 +54,10 @@ export function createAIClient(bridge,{signal}={}) {
     if(active)throw Error("AI_BUSY");
     return invoke("generateText",{prompt:validPrompt(prompt),images:[]},"text");
   }
-  async function backdrop(prompt){
+  async function backdrop(prompt,aspectRatio){
     if(active)throw Error("AI_BUSY");
-    return invoke("generateImage",{prompt:validPrompt(prompt),images:[]},"image");
+    if(aspectRatio!==undefined&&(!RATIOS.includes(aspectRatio)||aspectRatio==="auto"))throw Error("INVALID_PARAMETER");
+    return invoke("generateImage",{prompt:validPrompt(prompt),images:[],...(aspectRatio?{aspectRatio}:{})},"image");
   }
   return Object.freeze({execute,chat,backdrop,available:()=>Object.freeze({imageToImage:ready("editImage"),textToImage:ready("generateImage"),textToText:ready("generateText")}),busy:()=>active});
 }
@@ -64,6 +65,7 @@ export function friendlyError(error){
   const m=String(error?.message||error);
   if(m.includes("IMAGE_LIMIT_OR_FORMAT")) return "Pilih foto JPG, PNG atau WebP dengan ukuran maksimal 8 MB.";
   if(m.includes("IMAGE_DIMENSIONS_INVALID")) return "Resolusi foto terlalu besar atau foto tidak dapat dibuka. Pilih foto lain.";
+  if(m.includes("OVERLAY_TEXT_FIT"))return "Judul atau CTA terlalu panjang untuk ukuran desain. Ringkas teks atau pilih rasio lain.";
   if(m.includes("LOCAL_IMAGE_LIMIT")) return "Mode lokal mendukung foto hingga 4 megapiksel dan sisi maksimal 4096 px. Gunakan foto lebih kecil.";
   if(m.includes("LOCAL_OUTPUT_LIMIT")) return "PNG hasil melebihi 8 MB. Gunakan foto beresolusi lebih kecil.";
   if(m.includes("PIXEL_VERIFY_FAILED")) return "Piksel terlindungi berubah saat ekspor. Hasil ditolak; foto sumber tetap utuh.";

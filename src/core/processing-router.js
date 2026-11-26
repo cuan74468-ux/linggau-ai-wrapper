@@ -1,5 +1,7 @@
 import {supportsPrecision,backdropPlan} from "./local-image.js";
+import {supportsTextOverlay} from "./text-overlay.js";
 export function processingRoute(feature,keepOriginal,values={}){
+ if(supportsTextOverlay(feature.id))return {kind:"text-overlay",needsAI:true};
  if(feature.id==="sharpen")return {kind:"local-sharpen",needsAI:false};
  if(supportsPrecision(feature.id)&&keepOriginal){
   const plan=backdropPlan(values);

@@ -12,6 +12,7 @@ for(const f of findFeatures())test("catalog transport contract: "+f.id,async()=>
  const values=valuesFor(f),images=f.slots.map((_,i)=>({...photo,base64:i?"BBBB":"AAAA"}));
  const route=processingRoute(f,false,values);
  if(route.kind==="local-sharpen"){assert.equal(route.needsAI,false);assert.equal(calls.length,0);return;}
+ if(route.kind==="text-overlay"){const {overlayPlan}=await import("../src/core/text-overlay.js");const p=overlayPlan(f,values);await c.backdrop(p.prompt,p.ratio);assert.equal(calls.length,1);assert.equal(calls[0].method,"generateImage");assert.deepEqual(calls[0].req.images,[]);assert.equal(calls[0].req.aspectRatio,p.ratio);return;}
  const r=await c.execute(f,values,images);
  assert.equal(calls.length,1);const {method,req}=calls[0];
  assert.equal(method,{"image-to-image":"editImage","text-to-image":"generateImage","text-to-text":"generateText"}[f.engine]);
