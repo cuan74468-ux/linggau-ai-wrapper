@@ -1,5 +1,9 @@
+import {PHOTO_METHODS} from "../features/photo-expansion.js";
+import {PROFESSION_METHODS} from "../features/professions.js";
 // Explicit task workflow and parameter precedence. Prompt guidance, not independent model verification.
 const METHODS=Object.freeze({
+ ...PROFESSION_METHODS,
+ ...PHOTO_METHODS,
  "product-photo":"Identify the reference SKU, readable print, contour and visible materials first. Construct the set around the intact SKU; align camera perspective, surface contact and shadow. Use soft highlights on reflective materials, restrained negative space, and preserve small print before aesthetic polish.",
  "food-photo":"Identify the exact dish, serving vessel and visible ingredients. Style the surrounding table, not the food. Balance appetizing but accurate color, visible texture, highlight control and realistic scale. No invented steam, garnish, portion increase or food replacement.",
  "ai-model":"Design one fictional adult as a reusable fashion reference. Establish anatomical proportions and natural posture before choosing garment, camera crop and lighting. Avoid theatrical pose, dramatic lens distortion and distracting props unless explicitly selected and compatible.",

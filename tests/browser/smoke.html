@@ -37,7 +37,7 @@ async function run(){
  nav.querySelector('[aria-label="Foto Produk Profesional"]').click();
  assert(document.querySelector("#precision-mode").value==="strict","product defaults to precision");
  assert(document.querySelector("#param-notes").parentElement.hidden,"hidden unsupported notes");
- assert(document.querySelectorAll(".mobile-item").length===18,"all tools remain accessible");
+ assert(document.querySelectorAll(".mobile-item").length===42,"all tools remain accessible");
  // Opaque input and vision fixture: browser dialogs must not be required.
  const opaque=document.createElement("canvas");opaque.width=80;opaque.height=100;const o=opaque.getContext("2d");o.fillStyle="#ccc";o.fillRect(0,0,80,100);o.drawImage(sample,0,0);
  const opaqueBlob=await new Promise(r=>opaque.toBlob(r,"image/png"));const dt=new DataTransfer();dt.items.add(new File([opaqueBlob],"opaque.png",{type:"image/png"}));const fi=document.querySelector("#photo-0");fi.files=dt.files;fi.dispatchEvent(new Event("change",{bubbles:true}));

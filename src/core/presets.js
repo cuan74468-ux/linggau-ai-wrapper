@@ -1,6 +1,10 @@
+import {PHOTO_PRESETS} from "../features/photo-expansion.js";
+import {PROFESSION_PRESETS} from "../features/professions.js";
 // Presets set existing enumerated controls only. No hidden changes to user text or reference images.
 const p=(label,values)=>Object.freeze({label,values:Object.freeze(values)});
 export const PRESETS=Object.freeze({
+ ...PROFESSION_PRESETS,
+ ...PHOTO_PRESETS,
  "product-photo":[p("Katalog bersih",{background:"Putih bersih",lighting:"Softbox natural",style:"Minimalis",angle:"Pertahankan asli",composition:"Produk di tengah",props:"Tanpa tambahan",ratio:"1:1"}),p("Editorial promosi",{background:"Marmer",lighting:"Cahaya jendela",style:"Editorial",angle:"Pertahankan asli",composition:"Ruang kosong untuk teks",props:"Properti sederhana yang relevan",ratio:"4:5"})],
  "food-photo":[p("Menu restoran",{background:"Kayu natural",lighting:"Cahaya jendela",style:"Komersial natural",angle:"Pertahankan asli",scene:"Meja makan natural",props:"Minimal, tanpa menambah bahan makanan",ratio:"4:5"}),p("Katalog makanan",{background:"Putih bersih",lighting:"Softbox natural",style:"Minimalis",angle:"Pertahankan asli",scene:"Katalog menu bersih",props:"Pertahankan asli",ratio:"1:1"})],
  "ai-model":[p("Model dasar katalog",{outfit:"Kaus polos dan celana panjang",framing:"Seluruh badan",pose:"Berdiri depan, tangan rileks",background:"Studio beige",lighting:"Softbox natural",ratio:"4:5"}),p("Potret fashion",{outfit:"Busana kasual sopan",framing:"Setengah badan",pose:"Tampak tiga perempat",background:"Putih bersih",lighting:"Cahaya jendela",ratio:"3:4"})],

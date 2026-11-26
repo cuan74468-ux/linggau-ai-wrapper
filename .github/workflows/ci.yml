@@ -1,7 +1,7 @@
 name: Studio CI
 on:
   push:
-    branches: [main, release-0.2.0, loader-hardening]
+    branches: [main, release-0.2.0, release-0.3.0, loader-hardening]
   pull_request:
     branches: [main]
 permissions:
