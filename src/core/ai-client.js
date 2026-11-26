@@ -48,6 +48,8 @@ export function createAIClient(bridge) {
 }
 export function friendlyError(error){
   const m=String(error?.message||error);
+  if(m.includes("IMAGE_LIMIT_OR_FORMAT")) return "Pilih foto JPG, PNG atau WebP dengan ukuran maksimal 8 MB.";
+  if(m.includes("IMAGE_DIMENSIONS_INVALID")) return "Resolusi foto terlalu besar atau foto tidak dapat dibuka. Pilih foto lain.";
   if(m.includes("LOCAL_IMAGE_LIMIT")) return "Mode lokal mendukung foto hingga 4 megapiksel dan sisi maksimal 4096 px. Gunakan foto lebih kecil.";
   if(m.includes("LOCAL_OUTPUT_LIMIT")) return "PNG hasil melebihi 8 MB. Gunakan foto beresolusi lebih kecil.";
   if(m.includes("PIXEL_VERIFY_FAILED")) return "Piksel terlindungi berubah saat ekspor. Hasil ditolak; foto sumber tetap utuh.";
@@ -62,7 +64,7 @@ export function friendlyError(error){
   if(m.includes("404")) return "Model AI tidak tersedia pada runtime ini.";
   if(m.includes("400")) return "Model menolak konfigurasi atau input. Ubah parameter (misalnya rasio Otomatis) sebelum mencoba lagi.";
   if(m.includes("IMAGE_LIMIT")) return "Ukuran gambar melebihi batas 8 MB per foto atau 12 MB total.";
-  if(m.includes("AI_BRIDGE_NOT_CONNECTED")) return "AI Bridge tidak tersedia pada shell ini.";
+  if(m.includes("AI_BRIDGE_NOT_CONNECTED")) return "Koneksi AI belum tersedia. Buka ulang aplikasi dan coba lagi."
   if(m.includes("AI_NO_VALID")||m.includes("AI_OUTPUT_INVALID")) return "AI tidak mengembalikan hasil yang valid.";
   if(m.includes("PROMPT_LIMIT")) return "Brief terlalu panjang. Ringkas masukan sebelum menjalankan AI.";
   if(m.includes("AI_BUSY")) return "Satu permintaan masih berjalan.";

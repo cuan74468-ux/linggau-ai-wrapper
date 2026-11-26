@@ -1,7 +1,7 @@
 import { findFeatures, getFeature, CATEGORIES } from "./core/feature-registry.js";
 import { createAIClient, friendlyError } from "./core/ai-client.js";
 import { createAssetStore } from "./core/assets.js";
-import { readImage, decodeImage } from "./core/images.js";
+import { readImage, decodeImage, prepareWorkingPhoto } from "./core/images.js";
 import {assessOutput} from "./core/quality.js";
 import {supportsPrecision,backdropPlan,sharpenLocal,prepareCutout,composeCutout} from "./core/local-image.js";
 import {validPolygon,validateDimensions} from "./core/pixels.js";
@@ -187,7 +187,7 @@ export async function mount({root,ai,version,revision="",signal}){
     if(!store.list().length)grid.append(el("p","Belum ada hasil.","empty"));
   }
   function workspace(f,initial=null,initialIndex=0){
-    page="tool";current=f;slots=f.slots.map(()=>null);result=null;if(initial)slots[initialIndex]=initial;
+    page="tool";current=f;slots=f.slots.map(()=>null);result=null;
     const epoch=viewEpoch;let loading=0;const revisions=f.slots.map(()=>0);const values={};const inputs=[];const radios=new Map();const fieldGroups=new Map();
     const localSharpen=f.id==="sharpen",precisionSupported=supportsPrecision(f.id),primaryIds=primaryFieldIds(f);let precision=precisionSupported,points=[],maskSource=undefined,maskCanvas=null,maskImage=null,maskControls=[],useAlpha=false,transparent=false,alphaAvailable=false,drawMode=false,visionMask=null,visionBusy=false,brushMode=0,shadow=false,subjectKind=["background","formal-photo"].includes(f.id)?"person":"object",autoDetect=null;
     const heading=el("div",null,"tool-heading");const back=button("‹ "+f.category,()=>change(()=>categoryView(f.category)),"tool-back");heading.append(back,el("h1",f.title),el("p",f.description));view.replaceChildren(heading);
@@ -320,12 +320,12 @@ export async function mount({root,ai,version,revision="",signal}){
       for(const a of store.list().filter(x=>x.kind==="image")){const o=el("option",(getFeature(a.featureId)?.title||a.featureId)+" · "+a.id);o.value=a.id;picker.append(o);}
       const drop=el("div",null,"drop-zone");const browse=button("Pilih foto",()=>file.click(),"upload-button");drop.append(el("span","↑","upload-symbol"),browse,el("small","atau seret foto ke sini"));file.className="native-file";file.tabIndex=-1;
       const remove=button("Hapus foto",()=>{if(active||loading)return;++revisions[i];slots[i]=null;file.value="";picker.value="";draw();refresh();},"subtle");
-      function draw(){preview.replaceChildren();drop.hidden=!!slots[i];remove.hidden=!slots[i];if(slots[i])preview.append(image(slots[i]),el("small",slots[i].id?"Aset sesi "+slots[i].id:"Foto perangkat"),remove);if(i===0)syncMask();}
-      async function acceptPhoto(next){if(active||loading)return;const rev=++revisions[i];slots[i]=null;picker.value="";draw();loading++;refresh();try{const a=await readImage(next);if(epoch===viewEpoch&&rev===revisions[i]){slots[i]=a;status.textContent="Foto valid.";}}catch(e){if(epoch===viewEpoch&&rev===revisions[i]){file.value="";status.textContent=friendlyError(e);}}finally{loading--;if(epoch===viewEpoch){draw();refresh();}}}
+      function draw(){preview.replaceChildren();drop.hidden=!!slots[i];remove.hidden=!slots[i];if(slots[i]){const a=slots[i];preview.append(image(a),el("small",(a.id?"Hasil sesi":"Foto perangkat")+" · "+a.width+" × "+a.height+" px"));if(a.resized)preview.append(el("small","Foto kerja diperkecil dari "+a.originalWidth+" × "+a.originalHeight+" px agar ringan. Foto asli tetap utuh.","quality-warn"));preview.append(remove);}if(i===0)syncMask();}
+      async function acceptPhoto(next,fromStore=false){if(active||loading)return;const rev=++revisions[i];slots[i]=null;if(!fromStore)picker.value="";draw();loading++;refresh();try{const a=await prepareWorkingPhoto(fromStore?next:await readImage(next));if(!disposed&&epoch===viewEpoch&&rev===revisions[i]){slots[i]=a;status.textContent=a.resized?"Foto siap. Resolusi foto kerja disesuaikan agar ringan.":"Foto siap.";}}catch(e){if(epoch===viewEpoch&&rev===revisions[i]){file.value="";picker.value="";status.textContent=friendlyError(e);}}finally{loading--;if(!disposed&&epoch===viewEpoch){draw();refresh();}}}
       file.addEventListener("change",()=>{if(file.files?.[0])acceptPhoto(file.files[0]);});
       drop.addEventListener("dragover",e=>{e.preventDefault();if(!active&&!loading)drop.classList.add("dragging");});drop.addEventListener("dragleave",()=>drop.classList.remove("dragging"));drop.addEventListener("drop",e=>{e.preventDefault();drop.classList.remove("dragging");if(!active&&!loading&&e.dataTransfer?.files?.[0]){file.value="";acceptPhoto(e.dataTransfer.files[0]);}});
-      picker.addEventListener("change",()=>{if(active)return;++revisions[i];slots[i]=store.get(picker.value)||null;file.value="";draw();refresh();});
-      const upload=el("div",null,"upload-zone");upload.append(label,file,drop,el("small","JPG, PNG, WebP · maks. 8 MB per foto"));if(f.id==="virtual-try-on")upload.append(el("small",i===0?"Gunakan foto tubuh dengan area pakaian terlihat jelas. Foto wajah saja hanya dapat mengedit pakaian yang terlihat; jangan gunakan untuk try-on seluruh badan.":"Gunakan foto pakaian yang jelas, idealnya tanpa model lain. Hanya pakaian dari foto ini yang ditransfer."));upload.append(picker,preview);if(initial&&initialIndex===i)picker.value=initial.id;inputs.push(file,picker,browse,remove);form.append(upload);draw();
+      picker.addEventListener("change",()=>{if(active||loading)return;const a=store.get(picker.value);file.value="";if(a){void acceptPhoto(a,true);return;}++revisions[i];slots[i]=null;draw();refresh();});
+      const upload=el("div",null,"upload-zone");upload.append(label,file,drop,el("small","JPG, PNG, WebP · maks. 8 MB per foto. Foto besar disesuaikan otomatis."));if(f.id==="virtual-try-on")upload.append(el("small",i===0?"Gunakan foto tubuh dengan area pakaian terlihat jelas. Foto wajah saja hanya dapat mengedit pakaian yang terlihat; jangan gunakan untuk try-on seluruh badan.":"Gunakan foto pakaian yang jelas, idealnya tanpa model lain. Hanya pakaian dari foto ini yang ditransfer."));upload.append(picker,preview);inputs.push(file,picker,browse,remove);form.append(upload);draw();if(initial&&initialIndex===i){picker.value=initial.id;queueMicrotask(()=>{if(!disposed&&epoch===viewEpoch)void acceptPhoto(initial,true);});}
     });
     form.append(el("h2","2. Pilih konsep","section-heading"));
     if(precisionSupported)form.append(precisionPanel);
@@ -385,15 +385,16 @@ export async function mount({root,ai,version,revision="",signal}){
           const review=createReferenceReview(f,verified,jobSources);
           output.replaceChildren(el("h2","Periksa hasil"),el("p","Pastikan subjek, wajah (jika ada), dan detail asli tetap sesuai. Hasil belum disimpan."));
           const comparison=el("div",null,"reference-compare");
-          const original=el("figure");original.append(el("figcaption","Foto asli"),image(jobSources[0]));
+          const original=el("figure");original.append(el("figcaption",jobSources[0].resized?"Foto kerja (diperkecil)":"Foto asli"),image(jobSources[0]));
           const candidate=el("figure");candidate.append(el("figcaption",verified.processing?"Hasil edit":"Hasil AI"),image(verified));comparison.append(original,candidate);output.append(comparison);
           if(verified.processing==="precision")output.append(el("small","Periksa apakah seluruh objek asli tetap terlihat, termasuk wajah, rambut dan pakaian. Jika bagian hilang, pilih Tidak sesuai."));
+          if(jobSources.some(s=>s.resized))output.append(el("small","Pemeriksaan piksel berlaku pada resolusi foto kerja, bukan resolusi asli perangkat."));
           if(jobSources.length>1){const reference=el("details",null,"quality-panel");reference.append(el("summary","Referensi tambahan"));jobSources.slice(1).forEach((s,i)=>reference.append(el("small",f.slots[i+1]),image(s)));output.append(reference);}
           const warnings=verified.quality.checks.filter(c=>c.state==="warn");
           for(const warning of warnings)output.append(el("small",warning.label,"quality-warn"));
           const actions=el("div",null,"actions");
           actions.append(button("Sesuai, gunakan",()=>{if(active||epoch!==viewEpoch||review.state()!=="pending")return;try{finish(review.accept());}catch(e){output.replaceChildren(el("p",friendlyError(e)));}},"primary"),
-          button("Tidak sesuai",()=>{if(active||epoch!==viewEpoch||review.state()!=="pending")return;review.reject();result=null;output.replaceChildren(el("h2","Hasil ditolak"),el("p","Foto sumber tetap utuh. Hasil tidak disimpan atau dipakai ulang."),button("Kembali ke pengaturan",adjust));status.textContent="Hasil ditolak oleh pengguna.";if(precision){visionMask=null;points=[];useAlpha=alphaAvailable;correction.open=true;drawMask();}ready.textContent="Hasil tidak disetujui";}));
+          button("Tidak sesuai",()=>{if(active||epoch!==viewEpoch||review.state()!=="pending")return;review.reject();result=null;output.replaceChildren(el("h2","Hasil ditolak"),el("p","Foto sumber tetap utuh. Hasil tidak disimpan atau dipakai ulang."),button("Kembali ke pengaturan",adjust));status.textContent="Hasil ditolak oleh pengguna.";if(precision){visionMask=null;points=[];useAlpha=alphaAvailable;advanced.open=true;correction.open=true;drawMask();}ready.textContent="Hasil tidak disetujui";}));
           output.append(actions);status.textContent="Menunggu pemeriksaan hasil.";ready.textContent="Periksa hasil";
         }else finish(verified);
       }catch(e){const message=friendlyError(e);const code=String(e?.message||"");console.warn("LINGGAU_PROCESS_FAILED",phase,/^[A-Z][A-Z0-9_]{2,79}$/.test(code)?code:"UNEXPECTED_ERROR");output.replaceChildren(el("p",phase+": "+message,"empty"));status.textContent=phase+": "+message;ready.textContent="Proses belum berhasil";retry.hidden=false;showPane("input");}

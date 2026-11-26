@@ -1,6 +1,7 @@
 <!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><main id="app"></main>
 <script type="module">
 import {mount} from "../../src/app.js";
+import {prepareWorkingPhoto} from "../../src/core/images.js";
 import {prepareCutout,composeCutout,backdropPlan,sharpenLocal} from "../../src/core/local-image.js";
 const assert=(ok,msg)=>{if(!ok)throw Error(msg)};
 const wait=async(fn,msg)=>{for(let i=0;i<160;i++){const v=fn();if(v)return v;await new Promise(r=>setTimeout(r,50));}throw Error("timeout: "+msg);};
@@ -11,6 +12,12 @@ const asset={mimeType:"image/png",base64:sample.toDataURL("image/png").split(","
 let calls=0;
 const bridge={available:true,editImage:async()=>{throw Error("unexpected editImage")},generateText:async()=>{throw Error("unexpected generateText")},generateImage:async r=>{assert(r.images.length===0,"source leaked to background generation");calls++;return {...asset,kind:"image",elapsedMs:1};}};
 async function run(){
+ const small=await prepareWorkingPhoto(asset);assert(small.base64===asset.base64&&!small.resized,"small original bytes unchanged");
+ const large=document.createElement("canvas");large.width=4000;large.height=3000;const lc=large.getContext("2d");lc.fillStyle="#314559";lc.fillRect(1000,750,2000,1500);
+ const bigBlob=await new Promise(r=>large.toBlob(r,"image/png"));const big={mimeType:"image/png",base64:large.toDataURL("image/png").split(",")[1]};
+ const fit=await prepareWorkingPhoto(big);assert(fit.resized&&fit.originalWidth===4000&&fit.originalHeight===3000&&fit.width*fit.height<=4000000,"12MP photo fits");
+ const fiImage=await img(fit);const verify=document.createElement("canvas");verify.width=fit.width;verify.height=fit.height;const vc=verify.getContext("2d");vc.drawImage(fiImage,0,0);
+ assert(vc.getImageData(0,0,1,1).data[3]===0&&vc.getImageData(Math.floor(fit.width/2),Math.floor(fit.height/2),1,1).data[3]===255,"transparency survives resize");large.width=large.height=verify.width=verify.height=1;
  const initial=await prepareCutout(asset,[],true);
  const transparent=await composeCutout(initial,backdropPlan({transparent:true}));
  assert(transparent.pixelVerified&&transparent.protectedPixels===2400,"PNG round trip verification");
@@ -26,6 +33,8 @@ async function run(){
  const openTool=(category,id)=>{const cat=nav.querySelector('[aria-label="'+category+'"]');assert(cat,"category "+category);cat.click();const tool=document.querySelector('[data-tool="'+id+'"]');assert(tool,"tool "+id);tool.click();};
  openTool("Editor & Manipulasi Visual","background");
  const input=document.querySelector("#photo-0");
+ const bigTransfer=new DataTransfer();bigTransfer.items.add(new File([bigBlob],"large-camera.png",{type:"image/png"}));input.files=bigTransfer.files;input.dispatchEvent(new Event("change",{bubbles:true}));
+ await wait(()=>document.querySelector(".source-preview")?.textContent.includes("Foto kerja diperkecil"),"12MP upload prepared with visible disclosure");btn(document,"Hapus foto").click();
  const blob=await new Promise(r=>sample.toBlob(r,"image/png"));const transfer=new DataTransfer();transfer.items.add(new File([blob],"synthetic.png",{type:"image/png"}));input.files=transfer.files;input.dispatchEvent(new Event("change",{bubbles:true}));
  await wait(()=>document.querySelector(".mask-area")?.textContent.includes("Transparansi foto aktif"),"alpha input");
  const transparentBox=document.querySelector(".precision-option input");transparentBox.click();
@@ -64,7 +73,7 @@ async function run(){
  await wait(()=>btn(document,"Sesuai, gunakan"),"portrait route review");assert(calls===0,"portrait solid background must remain local");btn(document,"Sesuai, gunakan").click();await wait(()=>btn(document,"Unduh gambar"),"portrait accepted");
  document.querySelector(".advanced-settings").open=true;document.querySelector(".precision-correction").open=true;btn(document,"Deteksi objek (AI lokal)").click();await wait(()=>document.querySelector(".input-panel .status").textContent.includes("Perapian tepi foto belum berhasil"),"portrait failure feedback");
  nav.querySelector('[aria-label="Cari alat"]').click();const search=document.querySelector('input[aria-label="Cari alat"]');assert(document.querySelectorAll(".category-tool").length===40,"all 40 tools discoverable");search.value="rubrik";search.dispatchEvent(new Event("input",{bubbles:true}));assert(document.querySelectorAll(".category-tool").length===1,"search finds education tool");document.querySelector(".category-tool").click();assert(document.querySelector(".required-fields #param-learningTopic"),"essential brief visible");assert(!document.querySelector(".advanced-settings").open,"text advanced collapsed");assert(document.documentElement.scrollWidth<=window.innerWidth+1,"education 360px overflow");
- window.__smoke={ok:true,detail:"PNG round-trip, local sharpen, 360px workspace, alpha upload, review, product mode and automatic opaque input workflow and mocked vision failure feedback passed"};
+ window.__smoke={ok:true,detail:"12MP working-photo resize and alpha preservation, PNG round-trip, local sharpen, 360px workspace, alpha upload, review, product mode and automatic opaque input workflow and mocked vision failure feedback passed"};
 }
 run().catch(e=>{window.__smoke={ok:false,detail:(e.stack||String(e))+" | status: "+document.querySelector(".input-panel .status")?.textContent+" | output: "+document.querySelector(".output-panel")?.textContent?.slice(0,400)}});
 </script></body></html>
