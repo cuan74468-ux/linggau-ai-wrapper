@@ -1,5 +1,5 @@
 import {imageBytes,MAX_IMAGE} from "./ai-client.js";
-import {validateDimensions,sharpenPixels,validPolygon,compositePixels,existingAlphaMask,transparentPixels,countPixelChanges} from "./pixels.js";
+import {validateDimensions,sharpenPixels,validPolygon,compositePixels,existingAlphaMask,transparentPixels,countPixelChanges,cleanEdgeColors} from "./pixels.js";
 import {RULES} from "./parameter-rules.js";
 import {expandMask,contactBounds} from "./vision-mask.js";
 export const supportsPrecision=id=>["background","formal-photo","product-photo","food-photo","product-mockup"].includes(id);
@@ -37,12 +37,12 @@ export async function prepareCutout(asset,points,useAlpha=false,visionMask=null)
  else{const m=surface(w,h);m.ctx.fillStyle="#fff";m.ctx.beginPath();points.forEach(([x,y],i)=>i?m.ctx.lineTo(x*w,y*h):m.ctx.moveTo(x*w,y*h));m.ctx.closePath();m.ctx.fill();mask=m.ctx.getImageData(0,0,w,h).data;m.c.width=m.c.height=1;}
  let protectedPixels=0,editablePixels=0;for(let i=3;i<mask.length;i+=4){if(mask[i]===255&&source.data[i]===255)protectedPixels++;if(mask[i]===0||source.data[i]===0)editablePixels++;}
  if(!protectedPixels||!editablePixels)throw Error("MASK_AREA_INVALID");
- return {c,ctx,w,h,source,mask};
+ return {c,ctx,w,h,source,mask,autoMask:!!visionMask};
 }
 export async function composeCutout(prepared,plan,generated=null,shadow=false){
  const start=performance.now(),{c,ctx,w,h,source,mask}=prepared;
- let final;
- if(plan.transparent)final=transparentPixels(source.data,mask,w,h);
+ let final;const edgeSource=prepared.autoMask?cleanEdgeColors(source.data,mask,w,h):source.data;
+ if(plan.transparent)final=transparentPixels(edgeSource,mask,w,h);
  else{
    const b=surface(w,h);b.ctx.fillStyle=plan.color||"#ffffff";b.ctx.fillRect(0,0,w,h);
    if(!plan.color){
@@ -52,7 +52,7 @@ export async function composeCutout(prepared,plan,generated=null,shadow=false){
      b.ctx.drawImage(img,(w-dw)/2,(h-dh)/2,dw,dh);
    }
    if(shadow){const bounds=contactBounds(source.data,mask,w,h);if(bounds){const {x,y,rx,ry}=bounds;b.ctx.save();b.ctx.translate(x,y+ry*.25);b.ctx.scale(rx,ry);const g=b.ctx.createRadialGradient(0,0,0,0,0,1);g.addColorStop(0,"rgba(0,0,0,.24)");g.addColorStop(1,"rgba(0,0,0,0)");b.ctx.fillStyle=g;b.ctx.fillRect(-1,-1,2,2);b.ctx.restore();}}
-   const background=b.ctx.getImageData(0,0,w,h);final=compositePixels(source.data,background.data,mask,w,h);b.c.width=b.c.height=1;
+   const background=b.ctx.getImageData(0,0,w,h);final=compositePixels(edgeSource,background.data,mask,w,h);b.c.width=b.c.height=1;
  }
  // Preserve original decoded pixels for an independent PNG round-trip check.
  ctx.putImageData(new ImageData(final.pixels,w,h),0,0);

@@ -7,6 +7,7 @@ import {supportsPrecision,backdropPlan,sharpenLocal,prepareCutout,composeCutout}
 import {validPolygon,validateDimensions} from "./core/pixels.js";
 import {processingRoute,primaryFieldIds} from "./core/processing-router.js";
 import {validateMask,brushMask} from "./core/vision-mask.js";
+import {refineMask,findObjectSeed} from "./core/mask-refinement.js";
 import {needsReferenceReview,createReferenceReview} from "./core/reference-review.js";
 import {validatePresets,applyPreset} from "./core/presets.js";
 import {createChatSession,CHAT_MAX_INPUT} from "./core/chat.js";
@@ -266,16 +267,23 @@ export async function mount({root,ai,version,revision="",signal}){
         try{
           const {segmentObject,segmentPerson}=await import("./core/vision.js");
           const input=document.createElement("canvas");input.width=canvas.width;input.height=canvas.height;input.getContext("2d").drawImage(maskImage,0,0,input.width,input.height);
-          const m=subjectKind==="person"?await segmentPerson(input):await segmentObject(input,point);
+          const inputRGB=input.getContext("2d").getImageData(0,0,input.width,input.height).data;
+          const seed=automatic&&subjectKind!=="person"?findObjectSeed(inputRGB,input.width,input.height):null;
+          if(automatic&&subjectKind!=="person"&&!seed)throw Error("OBJECT_SEED_UNCERTAIN");
+          let m=subjectKind==="person"?await segmentPerson(input):await segmentObject(input,seed||point);
+          // MediaPipe returns mask at input resolution in the supported browser path.
+          // If another resolution is returned, sample the original preview at that size.
+          let rgb=inputRGB;if(m.width!==input.width||m.height!==input.height){const scaled=document.createElement("canvas");scaled.width=m.width;scaled.height=m.height;const sc=scaled.getContext("2d");sc.drawImage(input,0,0,m.width,m.height);rgb=sc.getImageData(0,0,m.width,m.height).data;}
+          m=refineMask(m,rgb);
           validateMask(m);let selected=0;for(const a of m.alpha)if(a>=128)selected++;if(selected/m.alpha.length<.03)throw Error("MASK_TOO_SMALL");
           if(epoch!==viewEpoch||maskSource!==source)return false;
           visionMask=m;useAlpha=false;points=[];drawMode=false;setBrush(0);update();status.textContent="Objek terdeteksi.";return true;
         }catch(e){
           if(epoch===viewEpoch&&maskSource===source){
             const code=String(e?.message||"");
-            const explanation=code.includes("VISION_TIMEOUT")?"Waktu pemuatan model habis.":code.includes("VISION_BUSY")?"Model masih memuat.":code.includes("MASK_TOO_SMALL")?"Bagian yang ditemukan terlalu kecil.":code.includes("VISION_MASK_UNAVAILABLE")?"Alat belum mengembalikan area objek yang bisa digunakan.":code.includes("MASK_AREA_INVALID")?"Objek belum dapat dipisahkan dari latar dengan jelas.":code.includes("PORTRAIT_MASK_INVALID")?"Alat potret belum mengembalikan hasil yang lengkap.":code.includes("MASK_INVALID")?"Data pemisahan objek tidak valid.":code.includes("VISION_LIBRARY_LOAD")?"Alat pemisah objek belum bisa dimuat.":code.includes("VISION_MODEL_LOAD")?"Alat pemisah objek belum siap.":code.includes("VISION_INFERENCE_FAILED")?"Pemisahan objek gagal pada perangkat ini.":"Deteksi tidak tersedia pada sesi ini.";
+            const explanation=code.includes("VISION_TIMEOUT")?"Waktu pemuatan model habis.":code.includes("VISION_BUSY")?"Model masih memuat.":code.includes("OBJECT_SEED_UNCERTAIN")?"Objek utama belum dapat dipilih otomatis. Buka koreksi dan ketuk objek satu kali.":code.includes("MASK_CLEANUP_UNCERTAIN")?"Tepi objek belum cukup jelas untuk dibersihkan dengan aman.":code.includes("MASK_TOO_SMALL")?"Bagian yang ditemukan terlalu kecil.":code.includes("VISION_MASK_UNAVAILABLE")?"Alat belum mengembalikan area objek yang bisa digunakan.":code.includes("MASK_AREA_INVALID")?"Objek belum dapat dipisahkan dari latar dengan jelas.":code.includes("PORTRAIT_MASK_INVALID")?"Alat potret belum mengembalikan hasil yang lengkap.":code.includes("MASK_INVALID")?"Data pemisahan objek tidak valid.":code.includes("VISION_LIBRARY_LOAD")?"Alat pemisah objek belum bisa dimuat.":code.includes("VISION_MODEL_LOAD")?"Alat pemisah objek belum siap.":code.includes("VISION_INFERENCE_FAILED")?"Pemisahan objek gagal pada perangkat ini.":"Deteksi tidak tersedia pada sesi ini.";
             const message=explanation+(visionMask?" Pilihan objek sebelumnya tetap tersedia.":" Coba lagi atau buka koreksi objek.");
-            count.textContent=message;status.textContent=message;console.warn("LINGGAU_VISION_FAILED",/^[A-Z][A-Z0-9_]{2,79}$/.test(code)?code:"VISION_UNEXPECTED");correction.open=true;
+            count.textContent=message;status.textContent=message;console.warn("LINGGAU_VISION_FAILED",/^[A-Z][A-Z0-9_]{2,79}$/.test(code)?code:"VISION_UNEXPECTED");advanced.open=true;correction.open=true;
           }
           return false;
         }finally{visionBusy=false;if(epoch===viewEpoch)refresh();}

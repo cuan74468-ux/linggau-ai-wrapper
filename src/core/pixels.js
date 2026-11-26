@@ -76,3 +76,23 @@ export function countPixelChanges(expected,actual,source,mask,w,h){
  }
  return {protectedPixels,changed};
 }
+
+// Estimate edge foreground colour from nearby opaque foreground and background.
+// Only partial-alpha pixels can change. Keep source RGBA and opaque core immutable.
+export function cleanEdgeColors(source,mask,w,h){
+ check(source,w,h);if(!(mask instanceof Uint8ClampedArray)||mask.length!==source.length)throw Error("MASK_INVALID");
+ const out=new Uint8ClampedArray(source.length);out.set(source);
+ const radii=[1,3,6,12].filter(r=>r<=Math.max(1,Math.round(Math.min(w,h)*.04)));
+ const dirs=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+ for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+  const i=(y*w+x)*4,m=mask[i+3];if(m<24||m>230||source[i+3]!==255)continue;
+  let f=-1,b=-1;
+  for(const r of radii){for(const [dx,dy] of dirs){const xx=x+dx*r,yy=y+dy*r;if(xx<0||xx>=w||yy<0||yy>=h)continue;const j=(yy*w+xx)*4;if(f<0&&mask[j+3]===255&&source[j+3]===255)f=j;if(b<0&&mask[j+3]===0&&source[j+3]===255)b=j;}if(f>=0&&b>=0)break;}
+  if(f<0||b<0)continue;
+  const a=m/255;let contrast=0,residual=0,fromF=0;
+  for(let c=0;c<3;c++){contrast=Math.max(contrast,Math.abs(source[f+c]-source[b+c]));residual=Math.max(residual,Math.abs(source[i+c]-(a*source[f+c]+(1-a)*source[b+c])));fromF=Math.max(fromF,Math.abs(source[i+c]-source[f+c]));}
+  if(contrast<40||residual>22||fromF<12)continue;
+  for(let c=0;c<3;c++){const recovered=(source[i+c]-(1-a)*source[b+c])/a;const delta=Math.max(-45,Math.min(45,recovered-source[i+c]));out[i+c]=source[i+c]+delta;}
+ }
+ return out;
+}
