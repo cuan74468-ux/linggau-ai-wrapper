@@ -1,7 +1,7 @@
 {
   "name": "Linggau AI Studio",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "shellApi": 2,
   "entry": "src/app.js",
-  "commit": "b35444ac0d33de5a170a6ef02144efecef7d78dd"
+  "commit": "b57167c6ac00730e776b36a44a8b40af997ddf5d"
 }
