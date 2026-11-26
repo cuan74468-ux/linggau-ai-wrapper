@@ -4,6 +4,8 @@ import {spawn} from "node:child_process";
 import {tmpdir} from "node:os";
 import {resolve,extname,sep} from "node:path";
 import {setTimeout as delay} from "node:timers/promises";
+const liveLoader=process.argv.includes("--live-loader");
+const expectedPreview=liveLoader?JSON.parse(await readFile("docs/channel.json","utf8")).commit:null;
 const benchmark=process.argv.includes("--matte-benchmark");
 const product=process.argv.includes("--product-benchmark");
 const real=benchmark||product||process.argv.includes("--real-vision");
@@ -20,12 +22,17 @@ try{
  if(!port)throw Error("Chromium failed to start: "+stderr);
  const pages=await (await fetch("http://127.0.0.1:"+port+"/json/list")).json();const page=pages.find(p=>p.type==="page");if(!page)throw Error("No Chromium page");
  ws=new WebSocket(page.webSocketDebuggerUrl);await new Promise((resolve,reject)=>{ws.addEventListener("open",resolve,{once:true});ws.addEventListener("error",reject,{once:true});});
- let seq=0;const pending=new Map();ws.addEventListener("message",e=>{const m=JSON.parse(e.data);if(pending.has(m.id)){const {resolve,reject}=pending.get(m.id);pending.delete(m.id);m.error?reject(Error(JSON.stringify(m.error))):resolve(m.result);}});
+ let seq=0;const pending=new Map(),requests=[];ws.addEventListener("message",e=>{const m=JSON.parse(e.data);if(m.method==="Network.requestWillBeSent")requests.push(m.params.request.url);if(pending.has(m.id)){const {resolve,reject}=pending.get(m.id);pending.delete(m.id);m.error?reject(Error(JSON.stringify(m.error))):resolve(m.result);}});
  const cdp=(method,params={})=>new Promise((resolve,reject)=>{const id=++seq;pending.set(id,{resolve,reject});ws.send(JSON.stringify({id,method,params}));});
+ if(liveLoader)await cdp("Network.enable");
  await cdp("Emulation.setDeviceMetricsOverride",product?{width:1200,height:1100,deviceScaleFactor:1,mobile:false}:{width:360,height:800,deviceScaleFactor:1,mobile:true});
- await cdp("Page.navigate",{url:"http://127.0.0.1:"+server.address().port+(product?"/tests/browser/product-benchmark.html"+(process.argv.includes("--birefnet-pilot")?"?pilot=1":""):benchmark?"/tests/browser/matte-benchmark.html":real?"/tests/browser/real-vision.html":"/tests/browser/smoke.html")});
+ await cdp("Page.navigate",{url:"http://127.0.0.1:"+server.address().port+(liveLoader?"/canvas/shell.html":product?"/tests/browser/product-benchmark.html"+(process.argv.includes("--birefnet-pilot")?"?pilot=1":""):benchmark?"/tests/browser/matte-benchmark.html":real?"/tests/browser/real-vision.html":"/tests/browser/smoke.html")});
  let result;
- for(let i=0;i<(real?3000:240);i++){await delay(100);try{const r=await cdp("Runtime.evaluate",{expression:"window.__smoke",returnByValue:true});result=r.result?.value;if(result)break;}catch{}}
+ for(let i=0;i<(real?3000:liveLoader?700:240);i++){await delay(100);try{const expression=liveLoader?`(()=>{const app=document.getElementById("app"),brand=document.querySelector("#studio .brand"),rail=document.querySelector("#studio .mobile-rail");if(app?.getAttribute("aria-busy")==="false"&&!brand)return {ok:false,detail:app.innerText.slice(0,400)};if(!brand||!rail||getComputedStyle(rail).overflowX!=="auto")return null;const rev=${JSON.stringify(expectedPreview)},good=JSON.parse(localStorage.getItem("linggau-loader-v2:lkg:preview")||"null");return {ok:brand.textContent.includes(rev.slice(0,7))&&good?.commit===rev&&document.documentElement.scrollWidth<=innerWidth+1,detail:"revision="+brand.textContent+" LKG="+good?.commit+" viewport="+innerWidth+" scrollWidth="+document.documentElement.scrollWidth};})()`:"window.__smoke";const r=await cdp("Runtime.evaluate",{expression,returnByValue:true});result=r.result?.value;if(result)break;}catch{}}
+ if(liveLoader){
+  const pointer="https://cuan74468-ux.github.io/linggau-ai-wrapper/channel.json",entry="https://cdn.jsdelivr.net/gh/cuan74468-ux/linggau-ai-wrapper@"+expectedPreview+"/src/app.js";
+  if(!requests.includes(pointer)||!requests.includes(entry)||requests.some(u=>u.includes("generativelanguage.googleapis.com")||u.includes("raw.githubusercontent.com")||u.includes("cdn.jsdelivr.net/gh/cuan74468-ux/linggau-ai-wrapper@main/")))throw Error("LIVE_LOADER_NETWORK_CONTRACT");
+ }
  if(product){
   try{
    await mkdir(resolve(root,"qa-artifacts"),{recursive:true});
@@ -35,5 +42,5 @@ try{
   }catch(e){console.warn("PRODUCT_EVIDENCE_FAILED",String(e.message).slice(0,200));}
  }
  if(!result?.ok)throw Error(result?.detail||"Browser smoke timed out");
- console.log((product?"PRODUCT_BENCHMARK_COMPLETE: ":benchmark?"MATTE_BENCHMARK_PASS: ":real?"REAL_VISION_PASS: ":"BROWSER_SMOKE_PASS: ")+result.detail);
+ console.log((liveLoader?"LIVE_LOADER_PASS: ":product?"PRODUCT_BENCHMARK_COMPLETE: ":benchmark?"MATTE_BENCHMARK_PASS: ":real?"REAL_VISION_PASS: ":"BROWSER_SMOKE_PASS: ")+result.detail);
 }finally{ws?.close();browser.kill("SIGKILL");server.close();await delay(200);await rm(dir,{recursive:true,force:true}).catch(()=>{});}

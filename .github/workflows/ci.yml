@@ -59,3 +59,5 @@ jobs:
         with:
           node-version: '22'
       - run: node scripts/check-pages.mjs
+      - name: Real Chromium Pages loader and immutable Preview mount (no AI call)
+        run: node --experimental-default-type=module tests/browser/run.mjs --live-loader
