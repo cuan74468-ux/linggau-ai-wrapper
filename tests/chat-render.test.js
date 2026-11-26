@@ -1,0 +1,4 @@
+import test from "node:test";import assert from "node:assert/strict";import {renderChatBody} from "../src/core/chat-render.js";
+const doc={createElement(tag){return {tag,children:[],append(...v){this.children.push(...v)}}},createTextNode(text){return {text}}};
+test("assistant emphasis uses safe DOM text nodes and preserves line breaks",()=>{const body=renderChatBody("**Judul**\n<img src=x onerror=alert(1)>",doc);assert.equal(body.className,"chat-body");assert.equal(body.children[0].tag,"strong");assert.equal(body.children[0].textContent,"Judul");assert.equal(body.children[1].text,"\n");assert.equal(body.children[2].text,"<img src=x onerror=alert(1)>");});
+test("unbalanced emphasis stays literal",()=>{assert.equal(renderChatBody("**belum selesai",doc).children[0].text,"**belum selesai");});

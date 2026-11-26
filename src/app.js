@@ -10,6 +10,7 @@ import {validateMask,brushMask} from "./core/vision-mask.js";
 import {needsReferenceReview,createReferenceReview} from "./core/reference-review.js";
 import {validatePresets,applyPreset} from "./core/presets.js";
 import {createChatSession,CHAT_MAX_INPUT} from "./core/chat.js";
+import {renderChatBody} from "./core/chat-render.js";
 import {ROI_TOOL,matchesRoi,calculateAds,adsReport} from "./core/roi-calculator.js";
 
 function el(tag,text,cls){const n=document.createElement(tag);if(text!=null)n.textContent=text;if(cls)n.className=cls;return n;}
@@ -161,7 +162,7 @@ export async function mount({root,ai,version,revision="",signal}){
       const turns=conversation.list();intro.hidden=turns.length>0;messages.replaceChildren();
       for(const turn of turns){
         const u=el("article",null,"chat-user");u.append(el("strong","Anda"),el("p",turn.user,"chat-body"));
-        const a=el("article",null,"chat-assistant");a.append(el("strong","Linggau AI"),el("p",turn.assistant,"chat-body"));
+        const a=el("article",null,"chat-assistant");a.append(el("strong","Linggau AI"),renderChatBody(turn.assistant));
         const feedback=el("small");feedback.setAttribute("role","status");
         a.append(button("Salin jawaban",async()=>{let tmp=a.querySelector("textarea");if(!tmp){tmp=el("textarea");tmp.value=turn.assistant;tmp.readOnly=true;tmp.setAttribute("aria-label","Jawaban untuk disalin");a.append(tmp);}try{const mode=await copyResult(tmp);feedback.textContent=mode==="manual"?"Teks dipilih. Gunakan menu Salin.":"Teks disalin.";if(mode!=="manual")tmp.remove();}catch{feedback.textContent="Pilih teks secara manual.";}}, "chat-copy"),feedback);
         messages.append(u,a);
