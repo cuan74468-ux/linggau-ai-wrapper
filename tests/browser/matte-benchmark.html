@@ -2,6 +2,7 @@
 import {segmentPerson} from "../../src/core/vision.js";
 import {refineMask} from "../../src/core/mask-refinement.js";
 import {segmentPortraitMatte} from "../../src/core/portrait-matting.js";
+import {combinePortraitMasks} from "../../src/core/portrait-consensus.js";
 const notes=[];
 async function read(src){const img=new Image();img.src=src;await img.decode();return img;}
 function canvas(w,h,img){const c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d").drawImage(img,0,0,w,h);return c;}
@@ -16,8 +17,8 @@ try{
   const raw=await segmentPerson(c),rgb=canvas(raw.width,raw.height,c).getContext("2d").getImageData(0,0,raw.width,raw.height).data;
   let base=raw;try{base=refineMask(raw,rgb);}catch(e){notes.push("baseline refinement rejected "+id+" "+e.message);}
   if(base.width!==w||base.height!==h)throw Error("Baseline geometry mismatch");
-  const matte=await segmentPortraitMatte(c),a=metrics(base.alpha,g),b=metrics(matte.alpha,g);
-  oldSum+=a.mae;newSum+=b.mae;oldLeak+=a.leak;newLeak+=b.leak;notes.push("row "+id+" MediaPipe="+JSON.stringify(a)+" MODNet="+JSON.stringify(b));
+  const matte=await segmentPortraitMatte(c),combined=combinePortraitMasks(base,matte),a=metrics(base.alpha,g),m=metrics(matte.alpha,g),b=metrics(combined.alpha,g);
+  oldSum+=a.mae;newSum+=b.mae;oldLeak+=a.leak;newLeak+=b.leak;notes.push("row "+id+" MediaPipe="+JSON.stringify(a)+" MODNet="+JSON.stringify(m)+" consensus="+JSON.stringify(b));
   if(b.mae>.12||b.miss>.12||b.leak>.15)throw Error("Candidate absolute quality threshold failed "+id);
  }
  if(newSum>=oldSum||newLeak>oldLeak)throw Error("Candidate did not reduce mean absolute alpha error and background leakage");
