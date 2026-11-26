@@ -1,0 +1,4 @@
+import test from "node:test";import assert from "node:assert/strict";
+import {saliencyInput,saliencyAlpha} from "../src/core/product-saliency.js";
+test("saliency preprocessing builds normalized RGB planes",()=>{const n=320*320,rgba=new Uint8ClampedArray(n*4);for(let i=0;i<n;i++)rgba.set([255,128,0,255],i*4);const d=saliencyInput(rgba);assert.equal(d.length,n*3);assert.ok(Math.abs(d[0]-(1-.485)/.229)<1e-6);assert.ok(Math.abs(d[n]-(128/255-.456)/.224)<1e-6);assert.ok(Math.abs(d[2*n]+.406/.225)<1e-6);});
+test("saliency mask rejects flat or invalid prediction and preserves confident opacity",()=>{assert.deepEqual([...saliencyAlpha([0,.5,1],3,1).alpha],[0,128,255]);assert.throws(()=>saliencyAlpha([.6,.6,.6],3,1),/MASK_CLEANUP_UNCERTAIN/);assert.throws(()=>saliencyAlpha([0,NaN,1],3,1),/MASK_INVALID/);});

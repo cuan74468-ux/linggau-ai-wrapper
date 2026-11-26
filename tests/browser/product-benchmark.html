@@ -1,16 +1,18 @@
 <!doctype html><html lang="id"><meta charset="utf-8"><title>Product segmentation benchmark</title><body><script type="module">
 import {segmentProduct} from "../../src/core/product-engine.js";
+import {segmentSalient} from "../../src/core/product-saliency.js";
 import {prepareCutout,composeCutout,backdropPlan} from "../../src/core/local-image.js";
 const notes=[];async function read(src){const i=new Image();i.src=src;await i.decode();return i;}
 function surface(w,h,img){const c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d").drawImage(img,0,0,w,h);return c;}
 function metrics(mask,gt,w,h){if(mask.width!==w||mask.height!==h)throw Error("geometry mismatch");let fg=0,bg=0,miss=0,leak=0,inter=0,union=0;for(let i=0;i<w*h;i++){const a=mask.alpha[i]>=128,t=gt[i*4]>=128;if(t){fg++;if(!a)miss++;}else{bg++;if(a)leak++;}if(t&&a)inter++;if(t||a)union++;}if(!fg||!bg)throw Error("invalid reference");return {iou:inter/union,miss:miss/fg,leak:leak/bg};}
 try{
- let completed=0,auto=0,passed=0;
+ let completed=0,auto=0,passed=0,saliencyPassed=0;
  for(const id of [0,12,64]){
   const image=await read("/matte-fixture/"+id+"/image"),truth=await read("/matte-fixture/"+id+"/mask");
   if(image.naturalWidth!==truth.naturalWidth||image.naturalHeight!==truth.naturalHeight)throw Error("reference geometry");
   const scale=Math.min(1,512/Math.max(image.naturalWidth,image.naturalHeight)),w=Math.round(image.naturalWidth*scale),h=Math.round(image.naturalHeight*scale);
   const c=surface(w,h,image),g=surface(w,h,truth).getContext("2d").getImageData(0,0,w,h).data;
+  const candidate=await segmentSalient(c),cs=metrics(candidate,g,w,h);const cut=await composeCutout(await prepareCutout({mimeType:"image/png",base64:c.toDataURL("image/png").split(",")[1]},[],false,candidate),backdropPlan({background:"Putih bersih"}));if(!cut.pixelVerified)throw Error("saliency PNG verification");if(cs.iou>=.9&&cs.miss<=.05&&cs.leak<=.05)saliencyPassed++;notes.push("row "+id+" saliency "+JSON.stringify(cs)+" protected="+cut.protectedPixels);
   let m;try{m=await segmentProduct(c);auto++;}catch(e){notes.push("row "+id+" auto rejected "+e.message);continue;}
   const score=metrics(m,g,w,h);
   const result=await composeCutout(await prepareCutout({mimeType:"image/png",base64:c.toDataURL("image/png").split(",")[1]},[],false,m),backdropPlan({background:"Putih bersih"}));
@@ -29,6 +31,6 @@ try{
   }catch(e){notes.push("synthetic left="+left+" rejected "+e.message);}
  }
  // Diagnostic only: poor quality or refusal is reported, not counted as quality PASS.
- window.__smoke={ok:true,detail:notes.join("; ")+"; automatic="+auto+"/3; exported="+completed+"/3; threshold="+passed+"/3; diagnostic only"};
+ window.__smoke={ok:true,detail:notes.join("; ")+"; automatic="+auto+"/3; exported="+completed+"/3; threshold="+passed+"/3; saliency threshold="+saliencyPassed+"/3; diagnostic only"};
 }catch(e){window.__smoke={ok:false,detail:notes.join("; ")+"; "+(e.stack||String(e))};}
 </script></body></html>
