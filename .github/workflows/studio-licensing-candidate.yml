@@ -56,3 +56,17 @@ jobs:
         env:
           STUDIO_MINIFIER_DIR: ${{ runner.temp }}/studio-minifier
         run: node --experimental-default-type=module tests/browser/run.mjs --studio-pilot-minified
+  immutable-pilot-cdn:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Verify exact public CDN bytes and module response headers
+        run: node prototypes/studio-licensing/check-pilot-cdn.mjs
