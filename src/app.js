@@ -151,15 +151,17 @@ export async function mount({root,ai,version,revision="",signal}){
     intro.append(big,el("h1","Apa yang ingin Anda kerjakan?"),el("p","Tanya, belajar, menulis, merencanakan, atau menyelesaikan pekerjaan sehari-hari."));
     const bar=el("div",null,"chat-bar");const fresh=button("＋ Chat baru",()=>{if(active)return;const reset=()=>{conversation.clear();chatHome();};if(conversation.list().length)confirmAction("Mulai percakapan baru? Percakapan lama akan dihapus, hasil alat tetap tersimpan.","Mulai chat baru",reset);else reset();},"chat-new");bar.append(el("strong","Asisten AI"),fresh);
     const messages=el("div",null,"chat-messages");messages.setAttribute("role","log");messages.setAttribute("aria-label","Percakapan");messages.setAttribute("aria-live","polite");
-    const form=el("form",null,"chat-composer");const field=el("textarea");field.rows=3;field.maxLength=CHAT_MAX_INPUT;field.placeholder="Tulis pertanyaan atau pekerjaan Anda…";field.setAttribute("aria-label","Pesan untuk asisten AI");
+    const form=el("form",null,"chat-composer");const field=el("textarea");field.rows=2;field.maxLength=CHAT_MAX_INPUT;field.placeholder="Tulis pertanyaan atau pekerjaan Anda…";field.setAttribute("aria-label","Pesan untuk asisten AI");
     const status=el("p",null,"chat-status");status.setAttribute("role","status");
     const send=el("button","Kirim ↑","primary");send.type="submit";
-    const foot=el("div",null,"chat-compose-actions");foot.append(el("small","Enter untuk baris baru"),send);
+    const foot=el("div",null,"chat-compose-actions");foot.append(send);
+    const inputRow=el("div",null,"chat-input-row");inputRow.append(field,foot);
     const info=el("details",null,"chat-info");info.append(el("summary","Tentang asisten & privasi"),el("p","Percakapan tersimpan sementara di halaman ini, bukan di akun Gmail. Asisten memakai konteks terbaru yang muat dalam batas prompt; percakapan lama dapat tidak ikut terkirim. Tidak memiliki akses langsung ke web, Gmail, Drive atau tindakan eksternal. Pesan dikirim ke Gemini saat Anda menekan Kirim. Hindari informasi sensitif."));
-    form.append(field,foot,status,info);
+    form.append(inputRow,status,info);
     panel.append(bar,intro,messages,form);view.replaceChildren(panel);
-    function draw(){
-      const turns=conversation.list();intro.hidden=turns.length>0;messages.replaceChildren();
+    let started=conversation.list().length>0;
+    function draw(pending="",latest=false){
+      const turns=conversation.list();intro.hidden=started;messages.hidden=!started;messages.replaceChildren();
       for(const turn of turns){
         const u=el("article",null,"chat-user");u.append(el("strong","Anda"),el("p",turn.user,"chat-body"));
         const a=el("article",null,"chat-assistant");a.append(el("strong","Linggau AI"),renderChatBody(turn.assistant));
@@ -167,15 +169,23 @@ export async function mount({root,ai,version,revision="",signal}){
         a.append(button("Salin jawaban",async()=>{let tmp=a.querySelector("textarea");if(!tmp){tmp=el("textarea");tmp.value=turn.assistant;tmp.readOnly=true;tmp.setAttribute("aria-label","Jawaban untuk disalin");a.append(tmp);}try{const mode=await copyResult(tmp);feedback.textContent=mode==="manual"?"Teks dipilih. Gunakan menu Salin.":"Teks disalin.";if(mode!=="manual")tmp.remove();}catch{feedback.textContent="Pilih teks secara manual.";}}, "chat-copy"),feedback);
         messages.append(u,a);
       }
+      if(pending){
+        const u=el("article",null,"chat-user");u.append(el("strong","Anda"),el("p",pending,"chat-body"));messages.append(u);
+        messages.scrollTop=messages.scrollHeight;
+      }else if(latest){
+        // Keep the beginning of a long new answer visible, rather than jumping to its end.
+        const answer=messages.lastElementChild;
+        if(answer)messages.scrollTop+=answer.getBoundingClientRect().top-messages.getBoundingClientRect().top;
+      }
     }
     function refreshChat(){send.disabled=active||!field.value.trim()||!client.available().textToText;field.disabled=active;fresh.disabled=active;send.textContent=active?"Memproses…":"Kirim ↑";setNav();}
     field.addEventListener("input",refreshChat);
     form.addEventListener("submit",async e=>{
       e.preventDefault();if(active||!field.value.trim()||!client.available().textToText)return;
-      const input=field.value.trim();closeConfirmation();active=true;status.textContent="Mengirim satu permintaan…";refreshChat();
-      try{const res=await client.chat(conversation.prompt(input));if(disposed||signal?.aborted)return;conversation.append(input,res.text);field.value="";draw();status.textContent="";ready.textContent="Siap digunakan";}
-      catch(e){status.textContent=friendlyError(e);ready.textContent="Proses belum berhasil";}
-      finally{active=false;if(!disposed){refreshChat();if(!compact.matches)field.focus();}}
+      const input=field.value.trim();closeConfirmation();active=true;started=true;info.open=false;draw(input);status.textContent="Memproses pesan…";refreshChat();
+      try{const res=await client.chat(conversation.prompt(input));if(disposed||signal?.aborted)return;conversation.append(input,res.text);field.value="";draw("",true);status.textContent="";ready.textContent="Siap digunakan";}
+      catch(e){if(!disposed){draw();status.textContent=friendlyError(e);ready.textContent="Proses belum berhasil";}}
+      finally{active=false;if(!disposed){refreshChat();if(!compact.matches)field.focus({preventScroll:true});}}
     });
     draw();refreshChat();
   }

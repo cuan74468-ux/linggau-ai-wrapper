@@ -12,8 +12,8 @@ const btn=(root,t)=>[...root.querySelectorAll("button")].find(b=>b.textContent.t
 const img=async a=>{const i=new Image();i.src="data:"+a.mimeType+";base64,"+a.base64;await i.decode();return i;};
 const sample=document.createElement("canvas");sample.width=80;sample.height=100;const ctx=sample.getContext("2d");ctx.fillStyle="#934218";ctx.fillRect(20,20,40,60);ctx.fillStyle="#ffffff";ctx.fillRect(25,35,30,18);
 const asset={mimeType:"image/png",base64:sample.toDataURL("image/png").split(",")[1]};
-let calls=0;
-const bridge={available:true,editImage:async()=>{throw Error("unexpected editImage")},generateText:async()=>{throw Error("unexpected generateText")},generateImage:async r=>{assert(r.images.length===0,"source leaked to background generation");calls++;return {...asset,kind:"image",elapsedMs:1};}};
+let calls=0,chatCalls=0,resolveChat,rejectChat;
+const bridge={available:true,editImage:async()=>{throw Error("unexpected editImage")},generateText:async()=>{chatCalls++;return new Promise((resolve,reject)=>{resolveChat=resolve;rejectChat=reject;});},generateImage:async r=>{assert(r.images.length===0,"source leaked to background generation");calls++;return {...asset,kind:"image",elapsedMs:1};}};
 async function run(){
  const small=await prepareWorkingPhoto(asset);assert(small.base64===asset.base64&&!small.resized,"small original bytes unchanged");
  const large=document.createElement("canvas");large.width=4000;large.height=3000;const lc=large.getContext("2d");lc.fillStyle="#314559";lc.fillRect(1000,750,2000,1500);
@@ -33,6 +33,24 @@ async function run(){
  const nav=document.querySelector("#studio .mobile-rail");
  await wait(()=>nav.clientWidth>0&&getComputedStyle(nav).overflowX==="auto","mobile stylesheet ready: "+window.innerWidth);
  assert(nav.scrollWidth>nav.clientWidth,"scrollable rail: "+nav.scrollWidth+"/"+nav.clientWidth+" viewport "+window.innerWidth);
+ // Chat welcome is only an empty-state; the pending message appears immediately.
+ const intro=document.querySelector(".chat-intro"),composer=document.querySelector(".chat-composer"),field=composer.querySelector("textarea");
+ const messages=document.querySelector(".chat-messages"),send=composer.querySelector('button[type="submit"]');
+ assert(!intro.hidden&&messages.hidden,"new chat welcome only");
+ field.value="Pesan uji pertama";field.dispatchEvent(new Event("input",{bubbles:true}));send.click();
+ assert(intro.hidden&&!messages.hidden&&messages.textContent.includes("Pesan uji pertama"),"welcome hidden and pending message visible on send");
+ assert(send.disabled&&chatCalls===1,"single request while pending");
+ resolveChat({kind:"text",text:Array.from({length:40},(_,i)=>"Baris jawaban "+(i+1)+" berisi penjelasan untuk pengujian ruang chat.").join("\n")});
+ await wait(()=>document.querySelector(".chat-assistant"),"chat response");
+ assert(intro.hidden&&messages.scrollHeight>messages.clientHeight,"long chat scrolls internally");
+ assert(composer.getBoundingClientRect().bottom<=document.querySelector(".mobile-bar").getBoundingClientRect().top+1,"composer visible above navigation");
+ assert(document.documentElement.scrollWidth<=innerWidth+1,"chat 360px no horizontal overflow");
+ field.value="Pesan kedua";field.dispatchEvent(new Event("input",{bubbles:true}));send.click();
+ rejectChat(Error("AI_HTTP_429"));await wait(()=>!send.disabled,"failed chat re-enabled");
+ assert(intro.hidden&&field.value==="Pesan kedua"&&chatCalls===2,"failed request preserves draft and hides welcome");
+ assert(document.querySelector(".chat-status").textContent.includes("Batas pemakaian"),"failure visible");
+ btn(document,"＋ Chat baru").click();btn(document.querySelector(".session-confirm"),"Mulai chat baru").click();
+ assert(!document.querySelector(".chat-intro").hidden&&document.querySelector(".chat-messages").hidden,"new chat restores welcome");
  const openTool=(category,id)=>{const cat=nav.querySelector('[aria-label="'+category+'"]');assert(cat,"category "+category);cat.click();const tool=document.querySelector('[data-tool="'+id+'"]');assert(tool,"tool "+id);tool.click();};
  openTool("Editor & Manipulasi Visual","background");
  const input=document.querySelector("#photo-0");
