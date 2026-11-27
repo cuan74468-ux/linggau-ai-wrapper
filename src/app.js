@@ -51,7 +51,14 @@ export async function mount({root,ai,version,revision="",signal}){
   const mark=el("img",null,"brandmark");mark.alt="";mark.src=new URL("./assets/linggau-mark.svg",import.meta.url).href;brand.append(mark);
   const identity=el("div");identity.append(el("strong","Linggau AI Studio"),el("small","Workspace kreatif · v"+version+(revision?" · "+revision.slice(0,7):"")));brand.append(identity);
   const ready=el("small",client.available().imageToImage?"Siap digunakan":"Sebagian fitur memerlukan koneksi AI","bridge-status");
-  top.append(brand,ready);
+  const report=el("a","Laporkan masalah","report-link");
+  report.href="https://wa.me/6283160697880?text=Mau%20laporkan%20masalah%20bug%20tool%20Linggau%20AI%20Studio";report.target="_blank";report.rel="noopener noreferrer";
+  report.title="Jika menemukan fitur bermasalah, laporkan ke admin melalui WhatsApp.";
+  report.setAttribute("aria-label","Fitur bermasalah? Laporkan masalah ke admin melalui WhatsApp");
+  const reportArea=el("div",null,"report-area");
+  reportArea.append(el("small","Fitur bermasalah?"),report);
+  const topActions=el("div",null,"top-actions");topActions.append(ready,reportArea);
+  top.append(brand,topActions);
   const sidebar=el("aside",null,"sidebar");sidebar.id="studio-sidebar";
   const nav=el("nav",null,"nav");nav.setAttribute("aria-label","Seluruh alat AI");
   const view=el("div",null,"workspace");view.id="studio-workspace";view.setAttribute("role","region");view.setAttribute("aria-label","Area kerja");view.tabIndex=-1;

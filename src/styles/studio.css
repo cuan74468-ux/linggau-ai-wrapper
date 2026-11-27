@@ -312,3 +312,17 @@
  #studio .chat-user{padding:9px 12px}
  #studio .chat-assistant{padding:8px 3px}
 }
+
+
+/* Persistent, compact support entry in the Studio header. */
+#studio .top-actions{display:flex;align-items:center;gap:12px;flex:none}
+#studio .report-area{display:flex;align-items:center;gap:5px;white-space:nowrap}
+#studio .report-area small{font-size:11px;color:var(--muted)}
+#studio .report-link{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:5px 9px;border:1px solid #d9d9d4;border-radius:999px;color:var(--ink);font-size:12px;font-weight:600;text-decoration:none;background:transparent}
+#studio .report-link:hover{text-decoration:underline}
+@media(max-width:700px){
+ #studio .top-actions{gap:0;flex:none}
+ #studio .report-area small{display:none}
+ #studio .report-link{padding:3px 7px;font-size:11px;white-space:normal;text-align:center;max-width:105px}
+ #studio .brand{flex:1;min-width:0}
+}

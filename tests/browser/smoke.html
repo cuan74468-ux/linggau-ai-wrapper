@@ -37,6 +37,12 @@ async function run(){
  const intro=document.querySelector(".chat-intro"),composer=document.querySelector(".chat-composer"),field=composer.querySelector("textarea");
  const messages=document.querySelector(".chat-messages"),send=composer.querySelector('button[type="submit"]');
  assert(!intro.hidden&&messages.hidden,"new chat welcome only");
+ const report=document.querySelector(".report-link");
+ assert(report&&report.getBoundingClientRect().width>0,"support link visible on mobile");
+ const supportURL=new URL(report.href);
+ assert(supportURL.origin==="https://wa.me"&&supportURL.pathname==="/6283160697880"&&supportURL.searchParams.get("text")==="Mau laporkan masalah bug tool Linggau AI Studio","exact owner-approved support destination and message");
+ assert(report.target==="_blank"&&report.rel.includes("noopener")&&report.rel.includes("noreferrer"),"support uses isolated external navigation");
+ assert(document.documentElement.scrollWidth<=innerWidth+1,"support header no horizontal overflow");
  assert(send.textContent==="↑"&&send.getAttribute("aria-label")==="Kirim pesan"&&send.disabled,"accessible icon-only send");
  const sendStyle=getComputedStyle(send);assert(send.getBoundingClientRect().width>=44&&send.getBoundingClientRect().height>=44&&sendStyle.borderRadius==="50%","round 44px send target");
  const emptyHeight=field.getBoundingClientRect().height;
