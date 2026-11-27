@@ -37,9 +37,14 @@ async function run(){
  const intro=document.querySelector(".chat-intro"),composer=document.querySelector(".chat-composer"),field=composer.querySelector("textarea");
  const messages=document.querySelector(".chat-messages"),send=composer.querySelector('button[type="submit"]');
  assert(!intro.hidden&&messages.hidden,"new chat welcome only");
+ assert(send.textContent==="↑"&&send.getAttribute("aria-label")==="Kirim pesan"&&send.disabled,"accessible icon-only send");
+ const sendStyle=getComputedStyle(send);assert(send.getBoundingClientRect().width>=44&&send.getBoundingClientRect().height>=44&&sendStyle.borderRadius==="50%","round 44px send target");
+ const emptyHeight=field.getBoundingClientRect().height;
+ field.value=Array.from({length:9},()=> "Baris panjang untuk uji").join("\n");field.dispatchEvent(new Event("input",{bubbles:true}));
+ assert(field.getBoundingClientRect().height>emptyHeight&&field.getBoundingClientRect().height<=113,"composer expands within cap");
  field.value="Pesan uji pertama";field.dispatchEvent(new Event("input",{bubbles:true}));send.click();
  assert(intro.hidden&&!messages.hidden&&messages.textContent.includes("Pesan uji pertama"),"welcome hidden and pending message visible on send");
- assert(send.disabled&&chatCalls===1,"single request while pending");
+ assert(send.disabled&&chatCalls===1&&send.getAttribute("aria-busy")==="true"&&send.textContent==="…","single request and clear pending state");
  resolveChat({kind:"text",text:Array.from({length:40},(_,i)=>"Baris jawaban "+(i+1)+" berisi penjelasan untuk pengujian ruang chat.").join("\n")});
  await wait(()=>document.querySelector(".chat-assistant"),"chat response");
  assert(intro.hidden&&messages.scrollHeight>messages.clientHeight,"long chat scrolls internally");

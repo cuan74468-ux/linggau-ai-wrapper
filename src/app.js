@@ -148,12 +148,12 @@ export async function mount({root,ai,version,revision="",signal}){
     page="home";current=null;slots=[];result=null;
     const panel=el("section",null,"chat-home"), intro=el("div",null,"chat-intro");
     const big=el("img",null,"chat-logo");big.src=mark.src;big.alt="";
-    intro.append(big,el("h1","Apa yang ingin Anda kerjakan?"),el("p","Tanya, belajar, menulis, merencanakan, atau menyelesaikan pekerjaan sehari-hari."));
+    intro.append(big,el("h1","Apa yang ingin Anda kerjakan?"),el("p","Tanya, belajar, dan berkarya."));
     const bar=el("div",null,"chat-bar");const fresh=button("＋ Chat baru",()=>{if(active)return;const reset=()=>{conversation.clear();chatHome();};if(conversation.list().length)confirmAction("Mulai percakapan baru? Percakapan lama akan dihapus, hasil alat tetap tersimpan.","Mulai chat baru",reset);else reset();},"chat-new");bar.append(el("strong","Asisten AI"),fresh);
     const messages=el("div",null,"chat-messages");messages.setAttribute("role","log");messages.setAttribute("aria-label","Percakapan");messages.setAttribute("aria-live","polite");
-    const form=el("form",null,"chat-composer");const field=el("textarea");field.rows=2;field.maxLength=CHAT_MAX_INPUT;field.placeholder="Tulis pertanyaan atau pekerjaan Anda…";field.setAttribute("aria-label","Pesan untuk asisten AI");
+    const form=el("form",null,"chat-composer");const field=el("textarea");field.rows=1;field.maxLength=CHAT_MAX_INPUT;field.placeholder="Tulis pesan…";field.setAttribute("aria-label","Pesan untuk asisten AI");
     const status=el("p",null,"chat-status");status.setAttribute("role","status");
-    const send=el("button","Kirim ↑","primary");send.type="submit";
+    const send=el("button","↑","chat-send");send.type="submit";send.setAttribute("aria-label","Kirim pesan");send.title="Kirim pesan";
     const foot=el("div",null,"chat-compose-actions");foot.append(send);
     const inputRow=el("div",null,"chat-input-row");inputRow.append(field,foot);
     const info=el("details",null,"chat-info");info.append(el("summary","Tentang asisten & privasi"),el("p","Percakapan tersimpan sementara di halaman ini, bukan di akun Gmail. Asisten memakai konteks terbaru yang muat dalam batas prompt; percakapan lama dapat tidak ikut terkirim. Tidak memiliki akses langsung ke web, Gmail, Drive atau tindakan eksternal. Pesan dikirim ke Gemini saat Anda menekan Kirim. Hindari informasi sensitif."));
@@ -178,7 +178,8 @@ export async function mount({root,ai,version,revision="",signal}){
         if(answer)messages.scrollTop+=answer.getBoundingClientRect().top-messages.getBoundingClientRect().top;
       }
     }
-    function refreshChat(){send.disabled=active||!field.value.trim()||!client.available().textToText;field.disabled=active;fresh.disabled=active;send.textContent=active?"Memproses…":"Kirim ↑";setNav();}
+    function resizeComposer(){field.style.height="auto";field.style.height=Math.max(44,Math.min(112,field.scrollHeight))+"px";}
+    function refreshChat(){send.disabled=active||!field.value.trim()||!client.available().textToText;field.disabled=active;fresh.disabled=active;send.textContent=active?"…":"↑";send.setAttribute("aria-label",active?"Pesan sedang diproses":"Kirim pesan");send.title=active?"Pesan sedang diproses":"Kirim pesan";send.setAttribute("aria-busy",String(active));resizeComposer();setNav();}
     field.addEventListener("input",refreshChat);
     form.addEventListener("submit",async e=>{
       e.preventDefault();if(active||!field.value.trim()||!client.available().textToText)return;
